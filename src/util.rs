@@ -13,6 +13,9 @@ pub enum JeromeError {
     /// The value in the tuple is the names of the variables that were missing from the assignment.
     IncompleteAssignment,
 
+    /// Represents an error where a certain constraint on a scope was not satisfied
+    InvalidScope,
+
     /// A general error with the given description
     General(String),
 
@@ -26,6 +29,7 @@ impl Error for JeromeError {
     fn description(&self) -> &str {
         match self {
             &JeromeError::IncompleteAssignment => "Missing assignments to the required Variables",
+            &JeromeError::InvalidScope => "Provided scope did not satisfy constraints",
             &JeromeError::General(ref err) => err.as_str(),
             &JeromeError::Unknown => "An unknown error occured"
         }
