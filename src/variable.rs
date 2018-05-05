@@ -22,7 +22,7 @@ pub struct Variable {
 
 }
 
-static mut variable_id: usize = 0;
+static mut VARIABLE_ID: usize = 0;
 
 impl Variable {
 
@@ -31,8 +31,8 @@ impl Variable {
     /// # Notes
     /// This is *not* thread-safe
     unsafe fn new(cardinality: usize) -> Self {
-        let id = variable_id;
-        variable_id += 1;
+        let id = VARIABLE_ID;
+        VARIABLE_ID += 1;
         
         Variable { id, cardinality }
     }
@@ -74,13 +74,13 @@ impl Assignment {
     /// Add an assignment to a variable.
     ///
     ///
-    pub fn set(&mut self, v: Variable, value: usize) -> Option<JeromeError> {
-        if self.assignments.contains_key(&v) {
+    pub fn set(&mut self, v: &Variable, value: usize) -> Option<JeromeError> {
+        if self.assignments.contains_key(v) {
             return Some(JeromeError::General(format!("Already contains an assignment to {:?}", v)));
         } 
 
         if value < v.cardinality() {
-            self.assignments.insert(v, value);
+            self.assignments.insert(*v, value);
             return None;
         }
 
@@ -91,8 +91,8 @@ impl Assignment {
         )
     }
 
-    pub fn get(&self, v: Variable) -> Option<&usize> {
-        self.assignments.get(&v)
+    pub fn get(&self, v: &Variable) -> Option<&usize> {
+        self.assignments.get(v)
     }
 
 }
@@ -135,32 +135,32 @@ mod tests {
         let v2 = Variable::discrete(10);
 
         let mut assn = Assignment::new();
-        if let None = assn.set(v, 2) {
+        if let None = assn.set(&v, 2) {
             panic!("Did not fail when attempting to add an out of range value");
         }
 
-        if let Some(_) = assn.set(v, 1) {
+        if let Some(_) = assn.set(&v, 1) {
             panic!("Failed to add a value in range");
         }
 
-        if let None = assn.set(v, 0) {
+        if let None = assn.set(&v, 0) {
             panic!("Did not fail when adding a duplicate assignment");
         }
 
-        match assn.get(v) {
+        match assn.get(&v) {
             Some(&val) => assert_eq!(1, val),
             None => panic!("Returned incorrect value")
         };
 
-        if let Some(_) = assn.get(v2) {
+        if let Some(_) = assn.get(&v2) {
             panic!("Did not fail when attempting to retrieve an un-added variable");
         }
 
-        if let None = assn.set(v2, 25) {
+        if let None = assn.set(&v2, 25) {
             panic!("Did not fail when attempting to add an out of range value");
         }
 
-        if let Some(_) = assn.set(v2, 5) {
+        if let Some(_) = assn.set(&v2, 5) {
             panic!("Failed to add a value in range");
         }
     }

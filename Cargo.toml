@@ -5,3 +5,4 @@ authors = ["jawallace16 <Jeffrey Wallace>"]
 
 [dependencies]
 ndarray = "0.11.2"
+itertools = "0.7.0"

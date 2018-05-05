@@ -2,19 +2,16 @@
 ///!
 ///! A `Factor` represents a relationship between some set of `Variable`s.
 
-extern crate ndarray;
-
 use super::{Result, JeromeError};
 use super::variable::{Variable, Assignment};
-use self::ndarray::prelude as nd;
-
+use super::ndarray::prelude as nd;
 
 /// Alias f64 ndarray::Array as Table
-pub type Table<D> = nd::Array<f64, D>;
+pub type Table = nd::ArrayD<f64>;
 
 
-#[derive(Debug, Clone)]
-pub enum Factor<D: nd::Dimension> {
+#[derive(Clone, Debug)]
+pub enum Factor {
     /// The empty, identity `Factor` with no scope. This type exists for dealing with arithmetic
     /// operations of `Factor`s
     Identity,
@@ -26,7 +23,7 @@ pub enum Factor<D: nd::Dimension> {
         scope: Vec<Variable>,
 
         /// The values of the `Factor` table.
-        table: Table<D>,
+        table: Table,
 
         /// `true`, if the `Factor` is a conditional probability distribution (i.e. is normalized)
         cpd: bool
@@ -34,8 +31,7 @@ pub enum Factor<D: nd::Dimension> {
 }
 
 
-impl<D: nd::Dimension> Factor<D> {
-
+impl Factor {
 
     /// Get the identity factor
     pub fn identity() -> Self {
@@ -44,15 +40,11 @@ impl<D: nd::Dimension> Factor<D> {
 
 
     /// Create a new `Factor`
-    pub fn new(scope: Vec<Variable>, table: Table<D>, cpd: bool) -> Result<Self> {
-        if scope.len() == 0 && table.len() == 0 {
-            // return the identity factor if this is an empty factor
-            return Ok(Factor::Identity);
-        } else if scope.len() == 0 || table.len() == 0 {
-            // if values or scope is nonempty, then return an error
+    pub fn new(scope: Vec<Variable>, table: Table, cpd: bool) -> Result<Self> {
+        if scope.len() == 0 {
             return Err(
                 JeromeError::General(
-                    String::from("Invalid arguments. Scope and values must both be empty or nonempty")
+                    String::from("Invalid arguments. Scope may not be empty")
                 )
             );
         } else if scope.len() != table.ndim() {
@@ -95,11 +87,19 @@ impl<D: nd::Dimension> Factor<D> {
     }
 
 
+    pub fn is_cpd(&self) -> bool {
+        match self {
+            &Factor::Identity => true,
+            &Factor::TableFactor { cpd, .. } => cpd
+        }
+    }
+
+
     /// Retrieve all of the operations defined by a `Factor`
     pub fn scope(&self) -> Vec<Variable> {
         match self {
             &Factor::Identity => vec![],
-            &Factor::TableFactor { ref scope, ref table, cpd } => scope.clone()
+            &Factor::TableFactor { ref scope, .. } => scope.clone()
         }
     }
 
@@ -110,9 +110,9 @@ impl<D: nd::Dimension> Factor<D> {
             &Factor::Identity => {
                 Err(JeromeError::General(String::from("The identity factor has no value")))
             },
-            &Factor::TableFactor { ref scope, ref table, cpd } => {
-                let idxs: Vec<Option<&usize>> = self.scope().iter().map(|&v| assignment.get(v)).collect();
-                if ! idxs.iter().any(|&v| v.is_none()) {
+            &Factor::TableFactor { ref scope, ref table, .. } => {
+                let idxs: Vec<Option<&usize>> = self.scope().iter().map(|v| assignment.get(v)).collect();
+                if idxs.iter().any(|&v| v.is_none()) {
                     return Err(JeromeError::IncompleteAssignment);
                 }
 
@@ -131,10 +131,7 @@ impl<D: nd::Dimension> Factor<D> {
     ///
     /// # Returns
     ///
-    pub fn multiply<E, F>(&self, other: &Factor<E>) -> Factor<F> 
-        where E: nd::Dimension,
-              F: nd::Dimension
-    {
+    pub fn multiply(&self, _other: &Self) -> Self {
         Factor::Identity
     }
 
@@ -147,10 +144,7 @@ impl<D: nd::Dimension> Factor<D> {
     ///
     /// # Returns
     ///
-    pub fn divide<E, F>(&self, other: &Factor<E>) -> Factor<F>
-        where E: nd::Dimension,
-              F: nd::Dimension
-    {
+    pub fn divide(&self, _other: &Self) -> Self {
         Factor::Identity
     }
 
@@ -163,12 +157,10 @@ impl<D: nd::Dimension> Factor<D> {
     ///
     /// # Returns
     ///
-    pub fn reduce<E>(&self, assignment: &Assignment) -> Result<Factor<E>> 
-        where E: nd::Dimension
-    {
+    pub fn reduce(&self, _assignment: &Assignment) -> Result<Self> {
         match self {
             &Factor::Identity => Ok(Factor::Identity),
-            &Factor::TableFactor { ref scope, ref table, cpd } => {
+            &Factor::TableFactor { .. } => {
                 Ok(Factor::Identity)
             }
         }
@@ -183,9 +175,7 @@ impl<D: nd::Dimension> Factor<D> {
     ///
     /// # Returns
     ///
-    pub fn marginalize<E>(&self, other: &Variable) -> Result<Factor<E>>
-        where E: nd::Dimension
-    {
+    pub fn marginalize(&self, _other: &Variable) -> Result<Self> {
         if let &Factor::Identity = self {
             return Ok(Factor::Identity);
         }
@@ -201,7 +191,132 @@ mod tests {
 
     #[test]
     fn identity() {
-        assert_eq!(true, true);
+        let f = Factor::identity();
+        let f2 = Factor::identity();
+
+        assert!(f.is_identity());
+        assert!(f2.is_identity());
     }
 
+    #[test]
+    fn table_factor() {
+        let vars = vec![ Variable::binary(), Variable::discrete(5), Variable::discrete(3) ];
+        let mut table = Table::ones(vec![2, 5, 3]);
+        table[[1, 1, 1].as_ref()] = 5.;
+
+        // assert table holds correct values
+        let f = Factor::new(vars.clone(), table, false).unwrap();
+
+        assert!(! f.is_identity());
+        for (x, y, z) in izip!(0..2, 0..5, 0..3) {
+            let mut assn = Assignment::new();
+            assn.set(&vars[0], x);
+            assn.set(&vars[1], y);
+            assn.set(&vars[2], z);
+
+            let val = f.value(&assn).unwrap();
+            if x == 1 && y == 1 && z == 1 {
+                assert_eq!(5., val);
+            } else {
+                assert_eq!(1., val);
+            }
+        }
+
+        assert!(! f.is_cpd());
+    }
+
+    #[test]
+    fn table_factor_errs() {
+        // empty scope
+        let vars = vec![];
+        let table = Table::ones(vec![2, 5, 3]);
+        let f = Factor::new(vars, table, false);
+        assert!(f.is_err());
+        match f.expect_err("missing error") {
+            JeromeError::General(_) => assert!(true),
+            _ => panic!("wrong error type")
+        };
+
+        // mismatched number of dimensions
+        let vars = vec![ Variable::binary(), Variable::binary() ];
+        let table = Table::ones(vec![2, 2, 2]);
+        let f = Factor::new(vars.clone(), table, false);
+        assert!(f.is_err());
+        match f.expect_err("missing error") {
+            JeromeError::General(_) => assert!(true),
+            _ => panic!("wrong error type")
+        };
+
+        // wrong cardinality
+        let table = Table::ones(vec![2, 3]);
+        let f = Factor::new(vars.clone(), table, false);
+        assert!(f.is_err());
+        match f.expect_err("missing error") {
+            JeromeError::General(_) => assert!(true),
+            _ => panic!("wrong error type")
+        };
+
+        // not a cpd
+        let table = Table::ones(vec![2, 2]);
+        let f = Factor::new(vars.clone(), table, true);
+        assert!(f.is_err());
+        match f.expect_err("missing error") {
+            JeromeError::General(_) => assert!(true),
+            _ => panic!("wrong error type")
+        };
+    }
+
+    #[test]
+    fn table_factor_cpd() {
+        let vars = vec![ Variable::binary(), Variable::binary() ];
+        let table = Table::ones(vec![2, 2]) / 4.;
+
+        let f = Factor::new(vars, table, true).expect("unexpected error");
+        assert!(f.is_cpd());
+    }
+
+    #[test]
+    fn value() {
+        let vars = vec![ Variable::binary(), Variable::binary() ];
+        let mut table = Table::ones(vec![2, 2]);
+
+        for (i, (x, y)) in (0..2).zip(0..2).enumerate() {
+            table[[x, y].as_ref()] = i as f64;
+        }
+
+        let f = Factor::new(vars.clone(), table, false).expect("Unexpected error");
+
+        // verify behavior on precise assignment
+        for (i, (x, y)) in (0..2).zip(0..2).enumerate() {
+            let mut assn = Assignment::new();
+            assn.set(&vars[0], x);
+            assn.set(&vars[1], y);
+
+            assert_eq!(i as f64, f.value(&assn).expect("unexpected error"));
+        }
+
+        // verify behavior on full assignment with out of scope values
+        let v3 = Variable::binary();
+
+        for (i, (x, y)) in (0..2).zip(0..2).enumerate() {
+            let mut assn = Assignment::new();
+            assn.set(&vars[0], x);
+            assn.set(&vars[1], y);
+            assn.set(&v3, 0);
+
+            assert_eq!(i as f64, f.value(&assn).expect("unexpected error"));
+        }
+
+        // verify behavior on incomplete assignment
+        let mut assn = Assignment::new();
+        assn.set(&vars[0], 0);
+        assn.set(&v3, 0);
+
+        let res = f.value(&assn);
+        assert!(res.is_err());
+        match res.expect_err("") {
+            JeromeError::IncompleteAssignment => assert!(true),
+            _ => panic!("incorrect error")
+        };
+    }
 }
