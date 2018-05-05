@@ -2,178 +2,99 @@
 //!
 //! A `Variable` represents a random variable in a Probabilistic Graphic Models.
 
-pub trait Observeable<T> {
+use std::collections::HashMap;
+use super::JeromeError;
 
-    fn observe(&mut self, val: T);
+/// A `Variable` in a Probablistic Graphical Model. A `Variable` is a discrete quantity that can take
+/// on a fixed number of potential values. These values are represented by simple integers,
+/// starting at 0.
+///
+/// # Notes
+/// A `Variable` is lightweight and designed to be copyable for ease of use. 
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct Variable {
 
-    fn assignment(&self) -> Option<T>;
+    /// The unique identifier of the `Variable`
+    id: usize,
 
-}
-
-#[derive(Clone, Debug)]
-pub struct BinaryVariable {
-    /// The name of the `Variable`
-    name: String,
-    assignment: Option<bool>
-}
-
-impl Observeable<bool> for BinaryVariable {
-    
-    fn observe(&mut self, val: bool) {
-        self.assignment = Some(val);
-    }
-
-    fn assignment(&self) -> Option<bool> {
-        self.assignment
-    }
+    /// The cardinality of the `Variable` - i.e. how many possible values it can take on
+    cardinality: usize
 
 }
 
-#[derive(Clone, Debug)]
-pub struct DiscreteVariable {
-    /// The name of the `Variable`
-    name: String,
-    count: u32,
-    assignment: Option<u32>
-}
-
-impl Observeable<u32> for DiscreteVariable {
-    
-    fn observe(&mut self, val: u32) {
-        if val >= self.count {
-            panic!("Invalid value ({}) for DiscreteVariable with count ({})", val, self.count);    
-        }
-
-        self.assignment = Some(val);
-    }
-
-    fn assignment(&self) -> Option<u32> {
-        self.assignment
-    }
-
-}
-
-#[derive(Clone, Debug)]
-pub struct EnumeratedVariable {
-    /// The name of the `Variable`
-    name: String,
-    set: Vec<String>,
-    assignment: Option<usize>
-}
-
-impl Observeable<String> for EnumeratedVariable {
-    
-    fn observe(&mut self, val: String) {
-        if let Some(idx) = self.set.iter().position(|v| *v == val) {
-            self.assignment = Some(idx);
-        } else {
-            panic!("Invalid value ({}) for EnumeratedVariable with values ({:?})", val, self.set);    
-        }
-    }
-
-    fn assignment(&self) -> Option<String> {
-        match self.assignment {
-            Some(idx) => Some(self.set[idx].clone()),
-            _ => None
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct ContinuousVariable {
-    /// The name of the `Variable`
-    name: String,
-    assignment: Option<f64>
-}
-
-impl Observeable<f64> for ContinuousVariable {
-    
-    fn observe(&mut self, val: f64) {
-        self.assignment = Some(val);
-    }
-   
-
-    fn assignment(&self) -> Option<f64> {
-        self.assignment
-    }
-
-}
-
-
-/// A `Domain` defines the domain of a random variable, the range of values over which it is
-/// defined.
-#[derive(Clone, Debug)]
-pub enum Variable {
-
-    /// A binary variable - can take on the values `true` and `false`
-    Binary(BinaryVariable),
-
-    /// A discrete variable with integer tags. The value passed as an argument defines the number
-    /// of values. The corresponding tags are in the range `0...val`
-    Discrete(DiscreteVariable),
-
-    /// An enumerated set of named values. This is a discrete variable, just with more
-    /// understandable tags
-    Enumerated(EnumeratedVariable),
-
-    /// A continuous variable. The allowed values are all real numbers. The underlying value is
-    /// represented by a floating point value
-    Continuous(ContinuousVariable)
-}
+static mut variable_id: usize = 0;
 
 impl Variable {
 
-    /// Construct a new `Variable` with a domain of `Domain::Binary`
-    pub fn new_binary(name: &str) -> Variable {
-        Variable::Binary(BinaryVariable { 
-            name: String::from(name),
-            assignment: None
-        })
+    /// Construct a new `Variable` with a unique identifier
+    ///
+    /// # Notes
+    /// This is *not* thread-safe
+    unsafe fn new(cardinality: usize) -> Self {
+        let id = variable_id;
+        variable_id += 1;
+        
+        Variable { id, cardinality }
     }
 
-    /// Construct a new `Variable` with a domain of `Domain::Discrete`
-    pub fn new_discrete(name: &str, count: u32) -> Variable {
-        Variable::Discrete(DiscreteVariable { 
-            name: String::from(name), 
-            count: count,
-            assignment: None
-        })
-    }
-
-    /// Construct a new `Variable` with a domain of `Domain::Enumerated`
-    pub fn new_enumerated(name: &str, values: &Vec<&str>) -> Variable {
-        Variable::Enumerated(EnumeratedVariable {
-            name: String::from(name),
-            set: values.into_iter().map(|s| String::from(*s)).collect(),
-            assignment: None
-        })
-    }
-
-    /// Construct a new `Variable` with a domain of `Domain::Continuous`
-    pub fn new_continuous(name: &str) -> Variable {
-        Variable::Continuous(ContinuousVariable {
-            name: String::from(name),
-            assignment: None
-        })
-    }
-
-    /// Get the name of the `Variable`
-    pub fn name(&self) -> &str {
-        match *self {
-            Variable::Binary(ref bv) => &bv.name,
-            Variable::Discrete(ref dv) => &dv.name,
-            Variable::Enumerated(ref ev) => &ev.name,
-            Variable::Continuous(ref cv) => &cv.name
+    /// Construct a new binary `Variable`.
+    pub fn binary() -> Self {
+        unsafe {
+            Variable::new(2)
         }
     }
 
-    /// Check if this `Variable` is discrete
-    pub fn is_discrete(&self) -> bool {
-        match *self {
-            Variable::Continuous(_) => true,
-            _ => false
+    /// Construct a new discrete `Variable` with a certain number of values
+    pub fn discrete(cardinality: usize) -> Self {
+        unsafe {
+            Variable::new(cardinality)
         }
     }
+
+    /// Get the 'cardinality' of the variable's domain. i.e. - how many values are valid assignments the 
+    /// variable may take 
+    pub fn cardinality(&self) -> usize {
+        self.cardinality
+    }
+
+}
+
+/// Represents an assignment of one or more `Variable`s to values.
+pub struct Assignment {
+    assignments: HashMap<Variable, usize>
+}
+
+impl Assignment {
+
+    /// Construct a new, empty assignment.
+    pub fn new() -> Self {
+        Assignment { assignments: HashMap::new() }
+    }
+
+    /// Add an assignment to a variable.
+    ///
+    ///
+    pub fn set(&mut self, v: Variable, value: usize) -> Option<JeromeError> {
+        if self.assignments.contains_key(&v) {
+            return Some(JeromeError::General(format!("Already contains an assignment to {:?}", v)));
+        } 
+
+        if value < v.cardinality() {
+            self.assignments.insert(v, value);
+            return None;
+        }
+
+        Some(
+            JeromeError::General(
+                format!("Error - cannot assign variable with cardinality {} a value of {}", v.cardinality(), value)
+            )
+        )
+    }
+
+    pub fn get(&self, v: Variable) -> Option<&usize> {
+        self.assignments.get(&v)
+    }
+
 }
 
 // Unit Tests for the Variable struct.
@@ -184,97 +105,64 @@ mod tests {
 
     #[test]
     fn binary() {
-        let mut var = Variable::new_binary("Foo");
-        assert_eq!(var.name(), "Foo");
+        let v = Variable::binary();
+        assert_eq!(v.cardinality(), 2);
+        
+        let v2 = v;
+        assert_eq!(v, v2);
 
-        if let Variable::Binary(ref mut bin) = var {
-            assert_eq!(bin.assignment(), None);
-            bin.observe(true);
-            if let Some(b) = bin.assignment() {
-                assert!(b);
-            } else {
-                panic!("None after observing");
-            }
-        } else {
-            panic!("Wrong variable type");
-        }
+        let v3 = Variable::binary();
+        assert_ne!(v, v3);
+        assert_ne!(v2, v3);
     }
 
     #[test]
     fn discrete() {
-        let mut var = Variable::new_discrete("Foo", 10);
-        assert_eq!(var.name(), "Foo");
+        let v = Variable::discrete(10);
+        assert_eq!(v.cardinality(), 10);
         
-        if let Variable::Discrete(ref mut dis) = var {
-            assert_eq!(dis.assignment(), None);
-            dis.observe(0);
-            if let Some(d) = dis.assignment() {
-                assert_eq!(d, 0);
-            } else {
-                panic!("None after observing");
-            }
-        } else {
-            panic!("Wrong variable type");
-        }
+        let v2 = v;
+        assert_eq!(v, v2);
+
+        let v3 = Variable::discrete(10);
+        assert_ne!(v, v3);
+        assert_ne!(v2, v3);
     }
 
     #[test]
-    #[should_panic]
-    fn discrete_observe_err() {
-        let mut var = Variable::new_discrete("Foo", 10);
+    fn assignment() {
+        let v = Variable::binary();
+        let v2 = Variable::discrete(10);
 
-        if let Variable::Discrete(ref mut dis) = var {
-            dis.observe(25);
+        let mut assn = Assignment::new();
+        if let None = assn.set(v, 2) {
+            panic!("Did not fail when attempting to add an out of range value");
+        }
+
+        if let Some(_) = assn.set(v, 1) {
+            panic!("Failed to add a value in range");
+        }
+
+        if let None = assn.set(v, 0) {
+            panic!("Did not fail when adding a duplicate assignment");
+        }
+
+        match assn.get(v) {
+            Some(&val) => assert_eq!(1, val),
+            None => panic!("Returned incorrect value")
+        };
+
+        if let Some(_) = assn.get(v2) {
+            panic!("Did not fail when attempting to retrieve an un-added variable");
+        }
+
+        if let None = assn.set(v2, 25) {
+            panic!("Did not fail when attempting to add an out of range value");
+        }
+
+        if let Some(_) = assn.set(v2, 5) {
+            panic!("Failed to add a value in range");
         }
     }
-
-    #[test]
-    fn enumerated() {
-        let values = vec!["Probabilistic", "Graphical", "Models"];
-        let mut var = Variable::new_enumerated("Foo", &values);
-        assert_eq!(var.name(), "Foo");
-        
-        if let Variable::Enumerated(ref mut en) = var {
-            assert_eq!(en.assignment(), None);
-            en.observe(String::from("Probabilistic"));
-            if let Some(v) = en.assignment() {
-                assert_eq!(v, "Probabilistic");
-            } else {
-                panic!("None after observing");
-            }
-        } else {
-            panic!("Wrong variable type");
-        }
-    }
-    
-    #[test]
-    #[should_panic]
-    fn enumerated_observe_err() {
-        let values = vec!["Probabilistic", "Graphical", "Models"];
-        let mut var = Variable::new_enumerated("Foo", &values);
-
-        if let Variable::Enumerated(ref mut en) = var {
-            en.observe(String::from("FooBar"));
-        }
-    }
-
-    #[test]
-    fn continuous() {
-        let mut var = Variable::new_continuous("Foo");
-        assert_eq!(var.name(), "Foo");
-        
-        if let Variable::Continuous(ref mut cv) = var {
-            assert_eq!(cv.assignment(), None);
-            cv.observe(1.05);
-            if let Some(v) = cv.assignment() {
-                assert!((1.05 - v).abs() < 0.00005);
-            } else {
-                panic!("None after observing");
-            }
-        } else {
-            panic!("Wrong variable type");
-        }
-    }
-
 }
 
