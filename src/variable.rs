@@ -105,20 +105,22 @@ impl Assignment {
 }
 
 /// An Iterator over all possible `Assignment`s of a set of variables
-pub struct AssignmentIter(Vec<Variable>, MultiProduct<Range<usize>>);
+pub struct AssignmentIter<'a>(&'a Vec<Variable>, MultiProduct<Range<usize>>);
 
 
 /// Utility function for `AssignmentIter`.
 fn to_assn(vars: &Vec<Variable>, vals: &Vec<usize>) -> Assignment {
     let mut assn = Assignment::new();
     for (var, &value) in vars.iter().zip(vals.iter()) {
+        // Note that an error here should be impossible if invariants are
+        // maintained
         assn.set(var, value);
     }
 
     assn
 }
 
-impl Iterator for AssignmentIter {
+impl<'a> Iterator for AssignmentIter<'a> {
     type Item = Assignment;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -128,7 +130,7 @@ impl Iterator for AssignmentIter {
 
 
 /// Create an `AssignmentIter`.
-pub fn all_assignments(vars: Vec<Variable>) -> AssignmentIter { 
+pub fn all_assignments(vars: &Vec<Variable>) -> AssignmentIter { 
     let vals = vars.iter()
                    .map(|v| 0..(v.cardinality()))
                    .multi_cartesian_product();
@@ -210,7 +212,7 @@ mod tests {
         let b = Variable::binary();
         let vars = vec![ a, b ];
 
-        for (i, assn) in all_assignments(vars).enumerate() {
+        for (i, assn) in all_assignments(&vars).enumerate() {
             assert_eq!(i / 2, *assn.get(&a).expect("Missing assignment")); 
             assert_eq!(i % 2, *assn.get(&b).expect("Missing assignment")); 
         }

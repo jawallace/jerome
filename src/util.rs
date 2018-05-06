@@ -16,6 +16,9 @@ pub enum JeromeError {
     /// Represents an error where a certain constraint on a scope was not satisfied
     InvalidScope,
 
+    /// Exactly what it sounds like
+    DivideByZero,
+
     /// A general error with the given description
     General(String),
 
@@ -30,6 +33,7 @@ impl Error for JeromeError {
         match self {
             &JeromeError::IncompleteAssignment => "Missing assignments to the required Variables",
             &JeromeError::InvalidScope => "Provided scope did not satisfy constraints",
+            &JeromeError::DivideByZero => "Encountered division by zero",
             &JeromeError::General(ref err) => err.as_str(),
             &JeromeError::Unknown => "An unknown error occured"
         }

@@ -3,7 +3,7 @@
 ///! A `Factor` represents a relationship between some set of `Variable`s.
 
 use super::{Result, JeromeError};
-use super::variable::{Variable, Assignment};
+use super::variable::{Variable, Assignment, all_assignments};
 use super::ndarray::prelude as nd;
 use super::itertools::Itertools;
 
@@ -164,7 +164,7 @@ impl Factor {
         // Factor::Identity is the multiplicative identity
         if let &Factor::Identity = self {
             return Ok(other.clone());
-        } else if let &Factor::Identity = self {
+        } else if let &Factor::Identity = other {
             return Ok(self.clone());
         }
 
@@ -192,44 +192,85 @@ impl Factor {
         // Allocate space for new table
         let mut tbl = nd::Array::ones(new_shape).into_dyn();
         
-        // Iterate over every assignment in the new scope
-        // TODO: this is useful, abstract this into a function
-        let assignment_iter = new_scope.iter()
-                                       .map(|v| 0..(v.cardinality()))
-                                       .multi_cartesian_product(); 
-
-        for vals in assignment_iter {
-            let mut assn = Assignment::new();
-            for (var, &value) in new_scope.iter().zip(vals.iter()) {
-                // Note that an error here should be impossible if invariants are
-                // maintained
-                assn.set(var, value);
-            }
-
+        for assn in all_assignments(&new_scope) {
             // For each assignment, multiply the values in each and store the result in the
             // new table
             //
             // Unwrapping here is safe because a failed lookup should be impossible if
             // invariants are maintained
             let phi1_val = self.value(&assn).unwrap();
-            let phi2_val = self.value(&assn).unwrap();
-            tbl[nd::IxDyn(&vals)] = phi1_val * phi2_val;
+            let phi2_val = other.value(&assn).unwrap();
+
+            let idx: Vec<usize> = new_scope.iter().map(|v| *assn.get(&v).unwrap()).collect();
+            tbl[nd::IxDyn(&idx)] = phi1_val * phi2_val;
         }
 
         Factor::new(new_scope, tbl, false)
     }
 
 
-    /// `Factor` division
+    /// `Factor` division. Calculates Psi(X, Y) = Phi1(X, Y) / Phi2(Y) where Phi1 = self and Phi2 =
+    /// other.
     ///
-    /// Defined in Koller & Friedman TODO
+    /// Defined in Koller & Friedman Section 10.3.1
+    ///
+    /// # Notes
+    /// In the context of this operation, 0/0 is defined as 0. However, X/0, where X != 0, is still
+    /// undefined.
     ///
     /// # Args
+    /// other: the denominator of the expression
     ///
     /// # Returns
+    /// a new `Factor` representing self / phi2
     ///
-    pub fn divide(&self, _other: &Self) -> Self {
-        Factor::Identity
+    /// # Errors
+    /// * `JeromeError::InvalidScope` if other.scope() is not a subset of self.scope()
+    /// * `JeromeError::DivideByZero` if a divide by zero error is found
+    pub fn divide(&self, other: &Self) -> Result<Self> {
+        // Trivial cases
+        if let &Factor::Identity = self {
+            return match other {
+                &Factor::Identity => Ok(Factor::Identity),
+                _ => Err(JeromeError::InvalidScope)
+            };
+        } else if let &Factor::Identity = other {
+            return Ok(self.clone());
+        }
+
+        // Okay... let's get to work
+        // First - check to make sure the scopes are okay
+        let my_scope = self.scope();
+        if ! other.scope().iter().all(|v| my_scope.contains(&v)) {
+            return Err(JeromeError::InvalidScope);
+        }
+
+        // Allocate a table with the shape and scope as self
+        let shape: Vec<usize> = my_scope.iter().map(|v| v.cardinality()).collect();
+        let mut tbl = nd::Array::ones(shape).into_dyn();
+
+        for assn in all_assignments(&my_scope) {
+            // For each assignment, divide the values in each and store the result in the
+            // new table
+            //
+            // Unwrapping here is safe because a failed lookup should be impossible if
+            // invariants are maintained
+            let phi1_val = self.value(&assn).unwrap();
+            let phi2_val = other.value(&assn).unwrap();
+
+            let idx: Vec<usize> = my_scope.iter().map(|v| *assn.get(&v).unwrap()).collect();
+            if phi2_val == 0. {
+                if phi1_val == 0. {
+                    tbl[nd::IxDyn(&idx)] = 0.;
+                } else {
+                    return Err(JeromeError::DivideByZero);
+                }
+            } else {
+                tbl[nd::IxDyn(&idx)] = phi1_val / phi2_val;
+            }
+        }
+
+        Factor::new(my_scope, tbl, false)
     }
 
 
@@ -319,6 +360,7 @@ impl Factor {
 // Unit tests
 mod tests {
     use super::*;
+    use std;
 
     #[test]
     fn identity() {
@@ -339,7 +381,7 @@ mod tests {
         let f = Factor::new(vars.clone(), table, false).unwrap();
 
         assert!(! f.is_identity());
-        for (x, y, z) in izip!(0..2, 0..5, 0..3) {
+        for (x, y, z) in iproduct!(0..2, 0..5, 0..3) {
             let mut assn = Assignment::new();
             assn.set(&vars[0], x);
             assn.set(&vars[1], y);
@@ -477,15 +519,93 @@ mod tests {
             vec![ 0.25, 0.35, 0.08, 0.16, 0.05, 0.07, 0., 0., 0.15, 0.21, 0.09, 0.18 ]
         ).expect("Unexpected error").into_dyn();
 
-        for (x, y, z) in izip!(0..3, 0..2, 0..2) {
+        for (x, y, z) in iproduct!(0..3, 0..2, 0..2) {
             let mut assn = Assignment::new();
             assn.set(&a, x);
             assn.set(&b, y);
             assn.set(&c, z);
 
             let idx = vec![x, y, z];
-            assert_eq!(expected[nd::IxDyn(&idx)], phi.value(&assn).expect("unexpected error"));
+            let val = expected[nd::IxDyn(&idx)];
+
+            assert!(
+                (val - phi.value(&assn).unwrap()).abs() < std::f64::EPSILON
+            );
         }
+    }
+
+    #[test]
+    fn prod_identity() {
+        let a = Variable::discrete(3);
+        let b = Variable::binary();
+
+        let tbl1 = nd::Array::from_shape_vec(
+            (3, 2), 
+            vec![ 0.5, 0.8, 0.1, 0., 0.3, 0.9 ]
+        ).expect("Unexpected error").into_dyn();
+        let phi1 = Factor::new(vec![ a, b ], tbl1.clone(), false).expect("Unexpected error");
+
+        let phi2 = Factor::identity();
+        let phi = phi1.product(&phi2).expect("Unexpected error");
+
+        assert_eq!(phi1.scope(), phi.scope());
+
+        for (x, y) in iproduct!(0..3, 0..2) {
+            let mut assn = Assignment::new();
+            assn.set(&a, x);
+            assn.set(&b, y);
+
+            let idx = vec![x, y];
+            let val = tbl1[nd::IxDyn(&idx)];
+            assert!(
+                (val - phi.value(&assn).unwrap()).abs() < std::f64::EPSILON
+            );
+        }
+
+        let phi = phi2.product(&phi1).expect("Unexpected error");
+        assert_eq!(phi1.scope(), phi.scope());
+
+        for (x, y) in iproduct!(0..3, 0..2) {
+            let mut assn = Assignment::new();
+            assn.set(&a, x);
+            assn.set(&b, y);
+
+            let idx = vec![x, y];
+            let val = tbl1[nd::IxDyn(&idx)];
+            assert!(
+                (val - phi.value(&assn).unwrap()).abs() < std::f64::EPSILON
+            );
+        }
+    }
+
+    #[test]
+    fn prod_err() {
+        let a = Variable::discrete(3);
+        let b = Variable::binary();
+        let c = Variable::binary();
+
+        let tbl1 = nd::Array::from_shape_vec(
+            (3, 2), 
+            vec![ 0.5, 0.8, 0.1, 0., 0.3, 0.9 ]
+        ).expect("Unexpected error").into_dyn();
+        let phi1 = Factor::new(vec![ a, b ], tbl1, false).expect("Unexpected error");
+
+        let tbl2 = nd::Array::from_shape_vec(
+            (2,), 
+            vec![ 0.5, 0.7 ]
+        ).expect("Unexpected error").into_dyn();
+        let phi2 = Factor::new(vec![ c ], tbl2, false).expect("Unexpected error");
+
+        let phi = phi1.product(&phi2);
+        match phi {
+            Ok(_) => panic!("Failed to produce error on invalid scope"),
+            Err(e) => {
+                match e {
+                    JeromeError::InvalidScope => assert!(true),
+                    _ => panic!("Failed to produce correct error on invalid scope")
+                };
+            }
+        };
     }
 
     #[test]
@@ -618,7 +738,10 @@ mod tests {
             assn.set(&c, y);
 
             let idx = [ x, y ];
-            assert_eq!(expected[nd::IxDyn(&idx)], marginalized.value(&assn).expect("unexpected error"));
+            let val = expected[nd::IxDyn(&idx)];
+            assert!(
+                (val - marginalized.value(&assn).unwrap()).abs() < std::f64::EPSILON
+            );
         }
     }
 }
