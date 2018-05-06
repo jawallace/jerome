@@ -607,6 +607,115 @@ mod tests {
             }
         };
     }
+    
+    #[test]
+    /// Example taken from Koller & Friedman Figure 4.3
+    fn divide() {
+        let a = Variable::discrete(3);
+        let b = Variable::binary();
+
+        let tbl1 = array![[ 0.5, 0.2 ], [ 0., 0. ], [ 0.3, 0.45 ]].into_dyn();
+        let phi1 = Factor::new(vec![ a, b ], tbl1, false).expect("Unexpected error");
+
+        let tbl2 = array![ 0.8, 0., 0.6 ].into_dyn();
+        let phi2 = Factor::new(vec![ a ], tbl2, false).expect("Unexpected error");
+
+        let phi = phi1.divide(&phi2).expect("Unexpected error");
+
+        let expected = array![[0.625, 0.25], [0., 0.], [ 0.5, 0.75 ]].into_dyn();
+
+        for (x, y) in iproduct!(0..3, 0..2) {
+            let mut assn = Assignment::new();
+            assn.set(&a, x);
+            assn.set(&b, y);
+
+            let idx = vec![x, y];
+            let val = expected[nd::IxDyn(&idx)];
+
+            assert!(
+                (val - phi.value(&assn).unwrap()).abs() < std::f64::EPSILON
+            );
+        }
+    }
+    
+    #[test]
+    fn divide_identity() {
+        let a = Variable::discrete(3);
+        let b = Variable::binary();
+
+        let tbl1 = array![[ 0.5, 0.2 ], [ 0., 0. ], [ 0.3, 0.45 ]].into_dyn();
+        let phi1 = Factor::new(vec![ a, b ], tbl1.clone(), false).expect("Unexpected error");
+
+        let phi2 = Factor::identity();
+
+        let phi = phi1.divide(&phi2).expect("Unexpected error");
+        for (x, y) in iproduct!(0..3, 0..2) {
+            let mut assn = Assignment::new();
+            assn.set(&a, x);
+            assn.set(&b, y);
+
+            let idx = vec![x, y];
+            let val = tbl1[nd::IxDyn(&idx)];
+
+            assert!(
+                (val - phi.value(&assn).unwrap()).abs() < std::f64::EPSILON
+            );
+        }
+        
+        let phi = phi2.divide(&phi2).expect("Unexpected error");
+        assert!(phi.is_identity());
+
+        let phi = phi2.divide(&phi1);
+        match phi {
+            Ok(_) => panic!("Incorrectly allowed 1 / factor division"),
+            Err(e) => {
+                match e {
+                    JeromeError::InvalidScope => assert!(true),
+                    _ => assert!(false)
+                }
+            }
+        };
+    }
+    
+    #[test]
+    /// Example taken from Koller & Friedman Figure 4.3
+    fn divide_err_bad_scope() {
+        let a = Variable::discrete(3);
+        let b = Variable::binary();
+
+        let tbl1 = array![[ 0.5, 0.2 ], [ 0., 0. ], [ 0.3, 0.45 ]].into_dyn();
+        let phi1 = Factor::new(vec![ a, b ], tbl1, false).expect("Unexpected error");
+
+        let tbl2 = array![ 0.8, 0., 0.6 ].into_dyn();
+        let phi2 = Factor::new(vec![ a ], tbl2, false).expect("Unexpected error");
+
+        let phi = phi2.divide(&phi1);
+        assert!(phi.is_err());
+        match phi.err().unwrap() {
+            JeromeError::InvalidScope => assert!(true),
+            _ => assert!(false)
+        };
+    }
+    
+    #[test]
+    /// Example taken from Koller & Friedman Figure 4.3
+    fn divide_err_div_by_zero() {
+        let a = Variable::discrete(3);
+        let b = Variable::binary();
+
+        let tbl1 = array![[ 0.5, 0.2 ], [ 0., 0. ], [ 0.3, 0.45 ]].into_dyn();
+        let phi1 = Factor::new(vec![ a, b ], tbl1, false).expect("Unexpected error");
+
+        let tbl2 = array![ 0., 0., 0. ].into_dyn();
+        let phi2 = Factor::new(vec![ a ], tbl2, false).expect("Unexpected error");
+
+        let phi = phi1.divide(&phi2);
+        assert!(phi.is_err());
+        match phi.err().unwrap() {
+            JeromeError::DivideByZero => assert!(true),
+            _ => assert!(false)
+        };
+    }
 
     #[test]
     /// Example take from Koller & Friedman Figure 4.5
