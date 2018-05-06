@@ -4,6 +4,8 @@
 
 use std::collections::HashMap;
 use super::JeromeError;
+use super::itertools::{Itertools, MultiProduct};
+use std::ops::Range;
 
 /// A `Variable` in a Probablistic Graphical Model. A `Variable` is a discrete quantity that can take
 /// on a fixed number of potential values. These values are represented by simple integers,
@@ -64,6 +66,7 @@ pub struct Assignment {
     assignments: HashMap<Variable, usize>
 }
 
+
 impl Assignment {
 
     /// Construct a new, empty assignment.
@@ -86,7 +89,11 @@ impl Assignment {
 
         Some(
             JeromeError::General(
-                format!("Error - cannot assign variable with cardinality {} a value of {}", v.cardinality(), value)
+                format!(
+                    "Error - cannot assign variable with cardinality {} a value of {}", 
+                    v.cardinality(), 
+                    value
+                )
             )
         )
     }
@@ -95,6 +102,38 @@ impl Assignment {
         self.assignments.get(v)
     }
 
+}
+
+/// An Iterator over all possible `Assignment`s of a set of variables
+pub struct AssignmentIter(Vec<Variable>, MultiProduct<Range<usize>>);
+
+
+/// Utility function for `AssignmentIter`.
+fn to_assn(vars: &Vec<Variable>, vals: &Vec<usize>) -> Assignment {
+    let mut assn = Assignment::new();
+    for (var, &value) in vars.iter().zip(vals.iter()) {
+        assn.set(var, value);
+    }
+
+    assn
+}
+
+impl Iterator for AssignmentIter {
+    type Item = Assignment;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        return self.1.next().map(|vals| to_assn(&self.0, &vals));
+    }
+}
+
+
+/// Create an `AssignmentIter`.
+pub fn all_assignments(vars: Vec<Variable>) -> AssignmentIter { 
+    let vals = vars.iter()
+                   .map(|v| 0..(v.cardinality()))
+                   .multi_cartesian_product();
+
+    AssignmentIter(vars, vals)
 }
 
 // Unit Tests for the Variable struct.
@@ -162,6 +201,18 @@ mod tests {
 
         if let Some(_) = assn.set(&v2, 5) {
             panic!("Failed to add a value in range");
+        }
+    }
+
+    #[test]
+    fn assignment_iter() {
+        let a = Variable::binary();
+        let b = Variable::binary();
+        let vars = vec![ a, b ];
+
+        for (i, assn) in all_assignments(vars).enumerate() {
+            assert_eq!(i / 2, *assn.get(&a).expect("Missing assignment")); 
+            assert_eq!(i % 2, *assn.get(&b).expect("Missing assignment")); 
         }
     }
 }
