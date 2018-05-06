@@ -5,6 +5,7 @@
 use super::{Result, JeromeError};
 use super::variable::{Variable, Assignment};
 use super::ndarray::prelude as nd;
+use super::itertools::Itertools;
 
 /// Alias f64 ndarray::Array as Table
 pub type Table = nd::ArrayD<f64>;
@@ -160,13 +161,62 @@ impl Factor {
     /// # Errors
     /// * `JeromeError::InvalidScope`, if intersection(self.scope(), other.scope()) = []
     pub fn product(&self, other: &Self) -> Result<Self> {
+        // Factor::Identity is the multiplicative identity
         if let &Factor::Identity = self {
             return Ok(other.clone());
-        } else if let &Factor::Identity = other {
+        } else if let &Factor::Identity = self {
             return Ok(self.clone());
         }
 
-        Ok(Factor::Identity)
+        // If we get here, we have two non-trivial (i.e. non-identity) factors.
+        // We are computing a new factor Psi(X, Y, Z) = phi1(X, Y) * phi2(Y, Z).
+        // See Koller & Friedman Definition 4.2
+        let my_scope = self.scope();
+        let other_scope = other.scope();
+
+        let count = my_scope.len() + other_scope.len();
+
+        // compute the set union(X, Y, Z)
+        let new_scope: Vec<Variable> = my_scope.into_iter()
+                                               .chain(other.scope())
+                                               .unique()
+                                               .collect();
+
+        if new_scope.len() == count {
+            // there was no intersection, so the factor product is undefined
+            return Err(JeromeError::InvalidScope);
+        }
+
+        let new_shape: Vec<usize> = new_scope.iter().map(|&v| v.cardinality()).collect(); 
+
+        // Allocate space for new table
+        let mut tbl = nd::Array::ones(new_shape).into_dyn();
+        
+        // Iterate over every assignment in the new scope
+        // TODO: this is useful, abstract this into a function
+        let assignment_iter = new_scope.iter()
+                                       .map(|v| 0..(v.cardinality()))
+                                       .multi_cartesian_product(); 
+
+        for vals in assignment_iter {
+            let mut assn = Assignment::new();
+            for (var, &value) in new_scope.iter().zip(vals.iter()) {
+                // Note that an error here should be impossible if invariants are
+                // maintained
+                assn.set(var, value);
+            }
+
+            // For each assignment, multiply the values in each and store the result in the
+            // new table
+            //
+            // Unwrapping here is safe because a failed lookup should be impossible if
+            // invariants are maintained
+            let phi1_val = self.value(&assn).unwrap();
+            let phi2_val = self.value(&assn).unwrap();
+            tbl[nd::IxDyn(&vals)] = phi1_val * phi2_val;
+        }
+
+        Factor::new(new_scope, tbl, false)
     }
 
 
@@ -542,10 +592,10 @@ mod tests {
             let idx = [x];
             assert_eq!(expected[nd::IxDyn(&idx)], reduced.value(&assn).expect("unexpected error"));
         }
-
     }
 
     #[test]
+    /// Example taken from Koller & Friedman Figure 9.7
     fn marginalize() {
         let a = Variable::discrete(3);
         let b = Variable::binary();
