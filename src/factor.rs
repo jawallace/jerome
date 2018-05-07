@@ -4,8 +4,9 @@
 
 use super::{Result, JeromeError};
 use super::variable::{Variable, Assignment, all_assignments};
-use super::ndarray::prelude as nd;
-use super::itertools::Itertools;
+
+use ndarray::prelude as nd;
+use itertools::Itertools;
 
 /// Alias f64 ndarray::Array as Table
 pub type Table = nd::ArrayD<f64>;
@@ -67,7 +68,7 @@ impl Factor {
         }
 
         // verify the table represents a cpd if the caller says it does
-        if cpd && (table.scalar_sum() - 1.0).abs() > 0.01 {
+        if cpd && (table.scalar_sum() - 1.0).abs() > 0.001 {
             return Err(
                 JeromeError::General(
                     String::from("Invalid arguments. Requested a CPD, but the values do not represent a CPD")

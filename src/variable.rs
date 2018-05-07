@@ -2,10 +2,15 @@
 //!
 //! A `Variable` represents a random variable in a Probabilistic Graphic Models.
 
-use std::collections::HashMap;
 use super::JeromeError;
-use super::itertools::{Itertools, MultiProduct};
+
+use itertools::{Itertools, MultiProduct};
+
+use std::collections::HashMap;
+use std::convert::From;
 use std::ops::Range;
+use std::string::ToString;
+
 
 /// A `Variable` in a Probablistic Graphical Model. A `Variable` is a discrete quantity that can take
 /// on a fixed number of potential values. These values are represented by simple integers,
@@ -57,6 +62,32 @@ impl Variable {
     /// variable may take 
     pub fn cardinality(&self) -> usize {
         self.cardinality
+    }
+
+}
+
+
+/// Defines conversion from a `Variable` to a ```usize```. This is simply a convenience function.
+impl From<Variable> for usize {
+    
+    fn from(v: Variable) -> usize {
+        v.id
+    }
+
+}
+
+impl<'a> From<&'a Variable> for usize {
+    
+    fn from(v: &'a Variable) -> usize {
+        v.id
+    }
+
+}
+
+impl ToString for Variable {
+
+    fn to_string(&self) -> String {
+        usize::from(self).to_string()    
     }
 
 }

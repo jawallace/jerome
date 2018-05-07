@@ -19,6 +19,16 @@ pub enum JeromeError {
     /// Exactly what it sounds like
     DivideByZero,
 
+    /// Represents an error where there was a parent variable expected, but not found
+    MissingParent,
+
+    /// Represents a variable that was present multiple times in a situation where it should only
+    /// have been present once
+    DuplicateVariable,
+
+    /// Represents an attempt to initialize a variable with an incompatible Initialization
+    InvalidInitialization,
+
     /// A general error with the given description
     General(String),
 
@@ -34,6 +44,9 @@ impl Error for JeromeError {
             &JeromeError::IncompleteAssignment => "Missing assignments to the required Variables",
             &JeromeError::InvalidScope => "Provided scope did not satisfy constraints",
             &JeromeError::DivideByZero => "Encountered division by zero",
+            &JeromeError::MissingParent => "Missing a parent from the model",
+            &JeromeError::DuplicateVariable => "A variable was encountered twice",
+            &JeromeError::InvalidInitialization => "The user requested an invalid initialization",
             &JeromeError::General(ref err) => err.as_str(),
             &JeromeError::Unknown => "An unknown error occured"
         }
