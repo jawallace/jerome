@@ -2,8 +2,8 @@
 ///!
 ///! A `Factor` represents a relationship between some set of `Variable`s.
 
-use super::{Result, JeromeError};
-use super::variable::{Variable, Assignment, all_assignments};
+use util::{Result, JeromeError};
+use variable::{Variable, Assignment, all_assignments};
 
 use ndarray::prelude as nd;
 use itertools::Itertools;
@@ -65,6 +65,13 @@ impl Factor {
                     )
                 );
             }
+        }
+
+        // factors may not have negative values
+        if cpd && table.iter().any(|&v| v <= 0.0) {
+            return Err(JeromeError::NonPositiveProbability);
+        } else if !cpd && table.iter().any(|&v| v < 0.0) {
+            return Err(JeromeError::NonPositiveProbability);
         }
 
         // verify the table represents a cpd if the caller says it does
@@ -360,7 +367,9 @@ impl Factor {
 
 // Unit tests
 mod tests {
+    #[cfg(test)]
     use super::*;
+    #[cfg(test)]
     use std;
 
     #[test]

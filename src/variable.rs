@@ -2,7 +2,7 @@
 //!
 //! A `Variable` represents a random variable in a Probabilistic Graphic Models.
 
-use super::JeromeError;
+use util::JeromeError;
 
 use itertools::{Itertools, MultiProduct};
 

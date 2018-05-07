@@ -29,6 +29,9 @@ pub enum JeromeError {
     /// Represents an attempt to initialize a variable with an incompatible Initialization
     InvalidInitialization,
 
+    /// Represents a situation in which there was a non-positive probability provided
+    NonPositiveProbability,
+
     /// A general error with the given description
     General(String),
 
@@ -46,7 +49,8 @@ impl Error for JeromeError {
             &JeromeError::DivideByZero => "Encountered division by zero",
             &JeromeError::MissingParent => "Missing a parent from the model",
             &JeromeError::DuplicateVariable => "A variable was encountered twice",
-            &JeromeError::InvalidInitialization => "The user requested an invalid initialization",
+            &JeromeError::InvalidInitialization => "An invalid initialization was provided",
+            &JeromeError::NonPositiveProbability => "Encountered a non-positive probability",
             &JeromeError::General(ref err) => err.as_str(),
             &JeromeError::Unknown => "An unknown error occured"
         }
