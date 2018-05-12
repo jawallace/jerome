@@ -5,8 +5,10 @@
 use util::{Result, JeromeError};
 use variable::{Variable, Assignment, all_assignments};
 
-use ndarray::prelude as nd;
 use itertools::Itertools;
+use ndarray::prelude as nd;
+use rand;
+use rand::distributions::{IndependentSample, Range};
 
 /// Alias f64 ndarray::Array as Table
 pub type Table = nd::ArrayD<f64>;
@@ -52,7 +54,6 @@ impl Factor {
         // axis should return an array where every element is equal to one.
         let marginalized = table.sum_axis(nd::Axis(table.ndim() - 1));
 
-        println!("CPD marginalized: {}", marginalized);
         // we allow a tolerance here to handle floating point uncertainty. 
         // TODO revisit this approach
         if ! marginalized.iter().all(|&v| (v - 1.0).abs() < 0.0001) {
@@ -313,7 +314,7 @@ impl Factor {
     pub fn reduce(&self, assignment: &Assignment) -> Self {
         match self {
             &Factor::Identity => Factor::Identity,
-            &Factor::TableFactor { ref scope, ref table, .. } => {
+            &Factor::TableFactor { ref scope, ref table, cpd } => {
                 // reduce table based on assignment
                 let mut view = table.view();
                 let mut new_shape: Vec<usize> = Vec::new();
@@ -335,12 +336,11 @@ impl Factor {
                     // empty assignment (relative to scope)
                     self.clone()
                 } else {
-                    // TODO - what to do if we are reducing a CPD? Renormalize?  For now, returning a
-                    // non-cpd factor
                     Factor::make_factor(
                         new_scope, 
                         view.to_owned().into_shape(new_shape).expect("reduce encountered error"), 
-                        false
+                        // If you reduce a CPD, you still get a CPD!
+                        cpd 
                     ).expect(
                         "reduce encountered unexpected error"
                     )
@@ -381,7 +381,55 @@ impl Factor {
             }
         }
     }
+    
+    /// Randomly sample an assignment to the CPD.
+    ///
+    /// This is not defined for a `Factor` for which ```factor.is_cpd() == false```.
+    ///
+    /// # Args:
+    /// * `assignment`: a full assignment to all `Variable`s in scope with the exception of the
+    /// last variable, which is the `Variable` that will be sampled
+    pub fn sample_cpd(&self, assignment: &Assignment) -> Result<usize> {
+        if ! self.is_cpd() || self.is_identity() {
+            panic!("Attempted to sample from a non-CPD");
+        }
 
+        if let Factor::TableFactor { ref scope, ref table, .. } = self {
+            let to_sample = scope.last().unwrap();
+            let idxs: Vec<Option<&usize>> = scope.iter()
+                                                 .filter(|&v| v != to_sample)
+                                                 .map(|v| assignment.get(v))
+                                                 .collect();
+
+            if idxs.iter().any(|i| i.is_none()) {
+                return Err(JeromeError::IncompleteAssignment)
+            } else {
+                let mut idx: Vec<usize> = idxs.into_iter()
+                                          .map(|i| *(i.unwrap()))
+                                          .collect();
+
+                let between = Range::new(0.0, 1.0);
+                let mut rng = rand::thread_rng();
+                let val = between.ind_sample(&mut rng);
+               
+                let mut sum = 0.0;
+                for i in 0..to_sample.cardinality() {
+                    idx.push(i);
+
+                    sum = sum + table[nd::IxDyn(&idx)];
+                    if val < sum {
+                        return Ok(i)
+                    }
+
+                    idx.pop();
+                }
+
+                return Ok(to_sample.cardinality() - 1);
+            }
+        } else {
+            panic!("unreachable");
+        }
+    }
 }
 
 // Unit tests
@@ -867,6 +915,39 @@ mod tests {
             assert_eq!(expected[nd::IxDyn(&idx)], reduced.value(&assn).expect("unexpected error"));
         }
     }
+   
+    #[test]
+    fn reduce_cpd() {
+        let i = Variable::binary();
+        let d = Variable::binary();
+        let g = Variable::discrete(3);
+
+        let table = array![
+            [[0.3, 0.4, 0.3], [0.05, 0.25, 0.7]], 
+            [[0.9, 0.08, 0.02], [0.5, 0.3, 0.2]]
+        ].into_dyn();
+
+        // P(G | I, D)
+        let f = Factor::cpd(g, vec![i, d], table.clone()).unwrap();
+
+        let mut assn = Assignment::new();
+        assn.set(&d, 0);
+
+        let reduced = f.reduce(&assn);
+
+        assert_eq!(vec![i, g], reduced.scope());
+        for j in 0..2 {
+            for k in 0..3 {
+                let mut assn = Assignment::new();
+                assn.set(&i, j);
+                assn.set(&g, k);
+
+                let idx = [ j, 0, k ];
+                assert_eq!(table[nd::IxDyn(&idx)], reduced.value(&assn).unwrap());
+            }
+        }
+    }
+
 
     #[test]
     /// Example taken from Koller & Friedman Figure 9.7
@@ -896,6 +977,30 @@ mod tests {
             assert!(
                 (val - marginalized.value(&assn).unwrap()).abs() < std::f64::EPSILON
             );
+        }
+    }
+
+    #[test]
+    fn sample_cpd() {
+        let i = Variable::binary();
+        let d = Variable::binary();
+        let g = Variable::discrete(3);
+
+        let table = array![
+            [[0.3, 0.4, 0.3], [0.05, 0.25, 0.7]], 
+            [[0.9, 0.08, 0.02], [0.5, 0.3, 0.2]]
+        ].into_dyn();
+
+        // P(G | I, D)
+        let f = Factor::cpd(g, vec![i, d], table).unwrap();
+
+        let mut a = Assignment::new();
+        a.set(&i, 0);
+        a.set(&d, 1);
+        
+        for _i in 0..100 {
+            let val = f.sample_cpd(&a).unwrap();
+            assert!(val <= 2);
         }
     }
 }
