@@ -32,11 +32,96 @@ pub enum Initialization<'a> {
 
 
 impl<'a> Initialization<'a> {
-   
+ 
+    /// Construct a CPD, initialized based on ```self```
+    ///
+    /// # Args
+    /// * `scope`: a set of `Variable`s over which to build the `Factor`
+    ///
+    /// # Returns
+    /// a `Factor`, initialized according to ```self```. The order of the `Variable`s in the
+    /// resulting `Factor` is undefined.
+    pub fn build_cpd(self, var: Variable, parents: HashSet<Variable>) -> Result<Factor> {
+        ///////////////////////////////////////////////////////////////////////////////
+        // Trivial cases
+
+        // if this is a user defined factor, it just needs to be verified and returned
+        if let Initialization::Table(f) = self {
+            if ! f.is_cpd() {
+                return Err(JeromeError::InvalidInitialization);
+            } 
+            
+            let s = f.scope();
+            if parents.iter().all(|v| s.contains(v)) && s.len() == parents.len() + 1 && s.contains(&var) {
+                return Ok(f);
+            } else {
+                return Err(JeromeError::InvalidScope);
+            }
+        }
+        
+        ///////////////////////////////////////////////////////////////////////////////
+        // Check for errors
+        if parents.len() == 0 {
+
+            match self {
+
+                // A binomial distribution on a non-binary variable
+                Initialization::Binomial(_) if var.cardinality() != 2 => {
+                    return Err(JeromeError::InvalidInitialization);
+                },
+
+                // A multinomial distribution with an incorrect number of parameters
+                Initialization::Multinomial(ps) if ps.len() != var.cardinality() => {
+                    return Err(JeromeError::InvalidInitialization);
+                },
+
+                _ => ()
+            }
+        } else {
+            match self {
+
+                // A binomial/multinomial on a non-unit scope
+                Initialization::Binomial(_) | Initialization::Multinomial(_) => {
+                    return Err(JeromeError::InvalidInitialization);
+                },
+
+                _ => ()
+            }
+        }
+        
+        ///////////////////////////////////////////////////////////////////////////////
+        // now, build CPD
+        let mut shape: Vec<usize> = parents.iter().map(|v| v.cardinality()).collect();
+        shape.push(var.cardinality());
+
+        let tbl = match self {
+            Initialization::Uniform => {
+                // normalizing constant is just the number of elements
+                let val = 1. / (var.cardinality() as f64);
+                nd::Array::from_elem(shape, val).into_dyn()
+            },
+            Initialization::Random => {
+                let ax = nd::Axis(shape.len() - 1);
+                let mut tbl = nd::Array::random(shape, Range::new(1.0, 100.0));
+                let z = tbl.sum_axis(ax);
+                (tbl / z).into_dyn()
+            },
+            Initialization::Binomial(p) => {
+                array![p, (1.0 - p)].into_dyn()
+            },
+            Initialization::Multinomial(p) => {
+                nd::Array::from_iter(p.iter().map(|&x| x)).into_dyn()
+            },
+            Initialization::Table(_) => panic!("unreachable")
+        };
+
+        Factor::cpd(var, parents.into_iter().collect(), tbl)
+    }
+
     /// Construct a factor, initialized based on ```self```
     ///
     /// # Args
-    /// scope: a set of `Variable`s over which to build the `Factor`
+    /// * `scope`: a set of `Variable`s over which to build the `Factor`
     ///
     /// # Returns
     /// a `Factor`, initialized according to ```self```. The order of the `Variable`s in the
@@ -51,10 +136,6 @@ impl<'a> Initialization<'a> {
 
         // if this is a user defined factor, it just needs to be verified and returned
         if let Initialization::Table(f) = self {
-            if ! f.is_cpd() {
-                return Err(JeromeError::InvalidInitialization);
-            } 
-            
             let s = f.scope();
             if s.iter().all(|v| scope.contains(v)) && s.len() == scope.len() {
                 return Ok(f);
@@ -120,7 +201,7 @@ impl<'a> Initialization<'a> {
             Initialization::Table(_) => panic!("unreachable")
         };
 
-        Factor::new(scope.into_iter().collect(), tbl, true)
+        Factor::new(scope.into_iter().collect(), tbl)
     }
 }
 
@@ -147,7 +228,7 @@ mod tests {
         let b = Variable::binary();
 
         let tbl = array![[0.1, 0.2], [0.3, 0.1], [0.2, 0.1]].into_dyn();
-        let f = Factor::new(vec![a, b], tbl.clone(), true).unwrap();
+        let f = Factor::new(vec![a, b], tbl.clone()).unwrap();
 
         let init = Initialization::Table(f);
 
@@ -165,7 +246,7 @@ mod tests {
         let c = Variable::binary();
 
         let tbl = array![[0.1, 0.2], [0.3, 0.1], [0.2, 0.1]].into_dyn();
-        let f = Factor::new(vec![a, b], tbl.clone(), true).unwrap();
+        let f = Factor::new(vec![a, b], tbl.clone()).unwrap();
 
         let init = Initialization::Table(f);
 
@@ -173,24 +254,6 @@ mod tests {
         scope.insert(a);
         scope.insert(b);
         scope.insert(c);
-
-        assert!(init.build_factor(scope).is_err());
-    }
-
-
-    #[test]
-    fn non_cpd() {
-        let a = Variable::discrete(3);
-        let b = Variable::binary();
-
-        let tbl = array![[0.1, 0.2], [0.3, 0.1], [20.0, 0.1]].into_dyn();
-        let f = Factor::new(vec![a, b], tbl.clone(), false).unwrap();
-
-        let init = Initialization::Table(f);
-
-        let mut scope = HashSet::new();
-        scope.insert(a);
-        scope.insert(b);
 
         assert!(init.build_factor(scope).is_err());
     }
@@ -209,7 +272,6 @@ mod tests {
         assert!(! factor.is_err());
         
         let factor = factor.unwrap();
-        assert!(factor.is_cpd());
         assert!(! factor.is_identity());
         let fscope: HashSet<Variable> = factor.scope().into_iter().collect();
         assert_eq!(scope, fscope);
@@ -233,7 +295,6 @@ mod tests {
         assert!(! factor.is_err());
         
         let factor = factor.unwrap();
-        assert!(factor.is_cpd());
         assert!(! factor.is_identity());
         let fscope: HashSet<Variable> = factor.scope().into_iter().collect();
         assert_eq!(scope, fscope);
@@ -259,7 +320,6 @@ mod tests {
         assert!(! factor.is_err());
         
         let factor = factor.unwrap();
-        assert!(factor.is_cpd());
         assert!(! factor.is_identity());
         let fscope: HashSet<Variable> = factor.scope().into_iter().collect();
         assert_eq!(scope, fscope);
@@ -290,7 +350,6 @@ mod tests {
         assert!(! factor.is_err());
         
         let factor = factor.unwrap();
-        assert!(factor.is_cpd());
         assert!(! factor.is_identity());
         let fscope: HashSet<Variable> = factor.scope().into_iter().collect();
         assert_eq!(scope, fscope);
@@ -320,7 +379,7 @@ mod tests {
         let b = Variable::binary();
 
         let tbl = array![[0.1, 0.2], [0.3, 0.1], [0.2, 0.1]].into_dyn();
-        let f = Factor::new(vec![a, b], tbl.clone(), true).unwrap();
+        let f = Factor::new(vec![a, b], tbl.clone()).unwrap();
 
         let init = Initialization::Table(f);
 
@@ -332,7 +391,6 @@ mod tests {
         assert!(! factor.is_err());
         
         let factor = factor.unwrap();
-        assert!(factor.is_cpd());
         assert!(! factor.is_identity());
         let fscope: HashSet<Variable> = factor.scope().into_iter().collect();
         assert_eq!(scope, fscope);

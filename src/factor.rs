@@ -41,8 +41,36 @@ impl Factor {
     }
 
 
+    /// Create a new `Factor` that represents the CPD ```P(v | parents)```.
+    ///
+    /// # Args:
+    /// * `v`: the `Variable` for which this `Factor` is a CPD
+    /// * `parents`: the parent `Variable`s
+    /// * `table`: the conditional probability table, where the last axis represents `v`
+    pub fn cpd(v: Variable, parents: Vec<Variable>, table: Table) -> Result<Self> {
+        // Verify `table` represents a CPT for v. If it does, then taking the sum along the final
+        // axis should return an array where every element is equal to one.
+        let marginalized = table.sum_axis(nd::Axis(table.ndim() - 1));
+
+        println!("CPD marginalized: {}", marginalized);
+        // we allow a tolerance here to handle floating point uncertainty. 
+        // TODO revisit this approach
+        if ! marginalized.iter().all(|&v| (v - 1.0).abs() < 0.0001) {
+            Err(JeromeError::NotACPD)
+        } else {
+            let mut scope: Vec<Variable> = parents.into_iter().collect();
+            scope.push(v);
+
+            Factor::make_factor(scope, table, true)
+        }
+    }
+
+    pub fn new(scope: Vec<Variable>, table: Table) -> Result<Self> {
+        Factor::make_factor(scope, table, false)
+    }
+
     /// Create a new `Factor`
-    pub fn new(scope: Vec<Variable>, table: Table, cpd: bool) -> Result<Self> {
+    fn make_factor(scope: Vec<Variable>, table: Table, cpd: bool) -> Result<Self> {
         if scope.len() == 0 {
             return Err(
                 JeromeError::General(
@@ -72,15 +100,6 @@ impl Factor {
             return Err(JeromeError::NonPositiveProbability);
         } else if !cpd && table.iter().any(|&v| v < 0.0) {
             return Err(JeromeError::NonPositiveProbability);
-        }
-
-        // verify the table represents a cpd if the caller says it does
-        if cpd && (table.scalar_sum() - 1.0).abs() > 0.001 {
-            return Err(
-                JeromeError::General(
-                    String::from("Invalid arguments. Requested a CPD, but the values do not represent a CPD")
-                )
-            );
         }
 
         Ok(Factor::TableFactor { scope, table, cpd })
@@ -213,7 +232,7 @@ impl Factor {
             tbl[nd::IxDyn(&idx)] = phi1_val * phi2_val;
         }
 
-        Factor::new(new_scope, tbl, false)
+        Factor::make_factor(new_scope, tbl, false)
     }
 
 
@@ -278,7 +297,7 @@ impl Factor {
             }
         }
 
-        Factor::new(my_scope, tbl, false)
+        Factor::make_factor(my_scope, tbl, false)
     }
 
 
@@ -318,7 +337,7 @@ impl Factor {
                 } else {
                     // TODO - what to do if we are reducing a CPD? Renormalize?  For now, returning a
                     // non-cpd factor
-                    Factor::new(
+                    Factor::make_factor(
                         new_scope, 
                         view.to_owned().into_shape(new_shape).expect("reduce encountered error"), 
                         false
@@ -345,12 +364,12 @@ impl Factor {
             // the identity factor marginalized over anything is the identity
             &Factor::Identity => Factor::Identity,
 
-            &Factor::TableFactor { ref scope, ref table, cpd } => {
+            &Factor::TableFactor { ref scope, ref table, ..} => {
                 if let Some(idx) = scope.iter().position(|&v| v == other) {
                     let new_table = table.sum_axis(nd::Axis(idx));
                     let new_scope = scope.clone().into_iter().filter(|&v| v != other).collect();
 
-                    Factor::new(new_scope, new_table, cpd).expect(
+                    Factor::make_factor(new_scope, new_table, false).expect(
                         "marginalize encountered error that should never occur"
                     )
                 } else {
@@ -388,7 +407,7 @@ mod tests {
         table[[1, 1, 1].as_ref()] = 5.;
 
         // assert table holds correct values
-        let f = Factor::new(vars.clone(), table, false).unwrap();
+        let f = Factor::new(vars.clone(), table).unwrap();
 
         assert!(! f.is_identity());
         for (x, y, z) in iproduct!(0..2, 0..5, 0..3) {
@@ -413,7 +432,7 @@ mod tests {
         // empty scope
         let vars = vec![];
         let table = Table::ones(vec![2, 5, 3]);
-        let f = Factor::new(vars, table, false);
+        let f = Factor::new(vars, table);
         assert!(f.is_err());
         match f.expect_err("missing error") {
             JeromeError::General(_) => assert!(true),
@@ -423,7 +442,7 @@ mod tests {
         // mismatched number of dimensions
         let vars = vec![ Variable::binary(), Variable::binary() ];
         let table = Table::ones(vec![2, 2, 2]);
-        let f = Factor::new(vars.clone(), table, false);
+        let f = Factor::new(vars.clone(), table);
         assert!(f.is_err());
         match f.expect_err("missing error") {
             JeromeError::General(_) => assert!(true),
@@ -432,16 +451,7 @@ mod tests {
 
         // wrong cardinality
         let table = Table::ones(vec![2, 3]);
-        let f = Factor::new(vars.clone(), table, false);
-        assert!(f.is_err());
-        match f.expect_err("missing error") {
-            JeromeError::General(_) => assert!(true),
-            _ => panic!("wrong error type")
-        };
-
-        // not a cpd
-        let table = Table::ones(vec![2, 2]);
-        let f = Factor::new(vars.clone(), table, true);
+        let f = Factor::new(vars.clone(), table);
         assert!(f.is_err());
         match f.expect_err("missing error") {
             JeromeError::General(_) => assert!(true),
@@ -450,13 +460,38 @@ mod tests {
     }
 
     #[test]
+    /// Example taken from Koller & Friedman Figure 3.4
     fn table_factor_cpd() {
-        let vars = vec![ Variable::binary(), Variable::binary() ];
-        let table = Table::ones(vec![2, 2]) / 4.;
+        let i = Variable::binary();
+        let d = Variable::binary();
+        let g = Variable::discrete(3);
 
-        let f = Factor::new(vars, table, true).expect("unexpected error");
-        assert!(f.is_cpd());
+        let table = array![
+            [[0.3, 0.4, 0.3], [0.05, 0.25, 0.7]], 
+            [[0.9, 0.08, 0.02], [0.5, 0.3, 0.2]]
+        ].into_dyn();
+
+        // P(G | I, D)
+        let f = Factor::cpd(g, vec![i, d], table);
+        assert!(! f.is_err());
     }
+    
+    #[test]
+    fn table_factor_not_cpd() {
+        let i = Variable::binary();
+        let d = Variable::binary();
+        let g = Variable::discrete(3);
+
+        let table = array![
+            [[0.3, 0.4, 0.3], [0.05, 0.25, 0.7]], 
+            [[0.9, 0.08, 0.2], [0.5, 0.3, 0.2]]
+        ].into_dyn();
+
+        // P(G | I, D)
+        let f = Factor::cpd(g, vec![i, d], table);
+        assert!(f.is_err());
+    }
+
 
     #[test]
     fn value() {
@@ -467,7 +502,7 @@ mod tests {
             table[[x, y].as_ref()] = i as f64;
         }
 
-        let f = Factor::new(vars.clone(), table, false).expect("Unexpected error");
+        let f = Factor::new(vars.clone(), table).expect("Unexpected error");
 
         // verify behavior on precise assignment
         for (i, (x, y)) in (0..2).zip(0..2).enumerate() {
@@ -514,13 +549,13 @@ mod tests {
             (3, 2), 
             vec![ 0.5, 0.8, 0.1, 0., 0.3, 0.9 ]
         ).expect("Unexpected error").into_dyn();
-        let phi1 = Factor::new(vec![ a, b ], tbl1, false).expect("Unexpected error");
+        let phi1 = Factor::new(vec![ a, b ], tbl1).expect("Unexpected error");
 
         let tbl2 = nd::Array::from_shape_vec(
             (2, 2), 
             vec![ 0.5, 0.7, 0.1, 0.2 ]
         ).expect("Unexpected error").into_dyn();
-        let phi2 = Factor::new(vec![ b, c ], tbl2, false).expect("Unexpected error");
+        let phi2 = Factor::new(vec![ b, c ], tbl2).expect("Unexpected error");
 
         let phi = phi1.product(&phi2).expect("Unexpected error");
 
@@ -553,7 +588,7 @@ mod tests {
             (3, 2), 
             vec![ 0.5, 0.8, 0.1, 0., 0.3, 0.9 ]
         ).expect("Unexpected error").into_dyn();
-        let phi1 = Factor::new(vec![ a, b ], tbl1.clone(), false).expect("Unexpected error");
+        let phi1 = Factor::new(vec![ a, b ], tbl1.clone()).expect("Unexpected error");
 
         let phi2 = Factor::identity();
         let phi = phi1.product(&phi2).expect("Unexpected error");
@@ -598,13 +633,13 @@ mod tests {
             (3, 2), 
             vec![ 0.5, 0.8, 0.1, 0., 0.3, 0.9 ]
         ).expect("Unexpected error").into_dyn();
-        let phi1 = Factor::new(vec![ a, b ], tbl1, false).expect("Unexpected error");
+        let phi1 = Factor::new(vec![ a, b ], tbl1).expect("Unexpected error");
 
         let tbl2 = nd::Array::from_shape_vec(
             (2,), 
             vec![ 0.5, 0.7 ]
         ).expect("Unexpected error").into_dyn();
-        let phi2 = Factor::new(vec![ c ], tbl2, false).expect("Unexpected error");
+        let phi2 = Factor::new(vec![ c ], tbl2).expect("Unexpected error");
 
         let phi = phi1.product(&phi2);
         match phi {
@@ -625,10 +660,10 @@ mod tests {
         let b = Variable::binary();
 
         let tbl1 = array![[ 0.5, 0.2 ], [ 0., 0. ], [ 0.3, 0.45 ]].into_dyn();
-        let phi1 = Factor::new(vec![ a, b ], tbl1, false).expect("Unexpected error");
+        let phi1 = Factor::new(vec![ a, b ], tbl1).expect("Unexpected error");
 
         let tbl2 = array![ 0.8, 0., 0.6 ].into_dyn();
-        let phi2 = Factor::new(vec![ a ], tbl2, false).expect("Unexpected error");
+        let phi2 = Factor::new(vec![ a ], tbl2).expect("Unexpected error");
 
         let phi = phi1.divide(&phi2).expect("Unexpected error");
 
@@ -654,7 +689,7 @@ mod tests {
         let b = Variable::binary();
 
         let tbl1 = array![[ 0.5, 0.2 ], [ 0., 0. ], [ 0.3, 0.45 ]].into_dyn();
-        let phi1 = Factor::new(vec![ a, b ], tbl1.clone(), false).expect("Unexpected error");
+        let phi1 = Factor::new(vec![ a, b ], tbl1.clone()).expect("Unexpected error");
 
         let phi2 = Factor::identity();
 
@@ -694,10 +729,10 @@ mod tests {
         let b = Variable::binary();
 
         let tbl1 = array![[ 0.5, 0.2 ], [ 0., 0. ], [ 0.3, 0.45 ]].into_dyn();
-        let phi1 = Factor::new(vec![ a, b ], tbl1, false).expect("Unexpected error");
+        let phi1 = Factor::new(vec![ a, b ], tbl1).expect("Unexpected error");
 
         let tbl2 = array![ 0.8, 0., 0.6 ].into_dyn();
-        let phi2 = Factor::new(vec![ a ], tbl2, false).expect("Unexpected error");
+        let phi2 = Factor::new(vec![ a ], tbl2).expect("Unexpected error");
 
         let phi = phi2.divide(&phi1);
         assert!(phi.is_err());
@@ -714,10 +749,10 @@ mod tests {
         let b = Variable::binary();
 
         let tbl1 = array![[ 0.5, 0.2 ], [ 0., 0. ], [ 0.3, 0.45 ]].into_dyn();
-        let phi1 = Factor::new(vec![ a, b ], tbl1, false).expect("Unexpected error");
+        let phi1 = Factor::new(vec![ a, b ], tbl1).expect("Unexpected error");
 
         let tbl2 = array![ 0., 0., 0. ].into_dyn();
-        let phi2 = Factor::new(vec![ a ], tbl2, false).expect("Unexpected error");
+        let phi2 = Factor::new(vec![ a ], tbl2).expect("Unexpected error");
 
         let phi = phi1.divide(&phi2);
         assert!(phi.is_err());
@@ -739,7 +774,7 @@ mod tests {
             vec![ 0.25, 0.35, 0.08, 0.16, 0.05, 0.07, 0., 0., 0.15, 0.21, 0.09, 0.18 ]
         ).expect("Unexpected error").into_dyn();
 
-        let phi = Factor::new(vec![a, b, c], table, false).expect("Unexpected error");
+        let phi = Factor::new(vec![a, b, c], table).expect("Unexpected error");
 
         let mut assn = Assignment::new();
         assn.set(&c, 0);
@@ -768,7 +803,7 @@ mod tests {
         let c = Variable::binary();
 
         let table = array![[ 1., 0. ], [ 0., 1. ]].into_dyn();
-        let phi = Factor::new(vec![a, b], table.clone(), false).expect("Unexpected error");
+        let phi = Factor::new(vec![a, b], table.clone()).expect("Unexpected error");
 
         let mut assn = Assignment::new();
         assn.set(&c, 1);
@@ -792,7 +827,7 @@ mod tests {
         let c = Variable::binary();
 
         let table = array![[ 1., 0. ], [ 0., 1. ]].into_dyn();
-        let phi = Factor::new(vec![a, b], table.clone(), false).expect("Unexpected error");
+        let phi = Factor::new(vec![a, b], table.clone()).expect("Unexpected error");
 
         let mut assn = Assignment::new();
         assn.set(&a, 0);
@@ -814,7 +849,7 @@ mod tests {
             vec![ 0.25, 0.35, 0.08, 0.16, 0.05, 0.07, 0., 0., 0.15, 0.21, 0.09, 0.18 ]
         ).expect("Unexpected error").into_dyn();
 
-        let phi = Factor::new(vec![a, b, c], table, false).expect("Unexpected error");
+        let phi = Factor::new(vec![a, b, c], table).expect("Unexpected error");
 
         let mut assn = Assignment::new();
         assn.set(&c, 0);
@@ -845,7 +880,7 @@ mod tests {
             vec![ 0.25, 0.35, 0.08, 0.16, 0.05, 0.07, 0., 0., 0.15, 0.21, 0.09, 0.18 ]
         ).expect("Unexpected error").into_dyn();
 
-        let phi = Factor::new(vec![a, b, c], table, false).expect("Unexpected error");
+        let phi = Factor::new(vec![a, b, c], table).expect("Unexpected error");
 
         let marginalized = phi.marginalize(b);
         assert_eq!(vec![a, c], marginalized.scope());

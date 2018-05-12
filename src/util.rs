@@ -26,6 +26,9 @@ pub enum JeromeError {
     /// have been present once
     DuplicateVariable,
 
+    /// Represents the situation when we expected a CPD but did not receive one
+    NotACPD,
+
     /// Represents an attempt to initialize a variable with an incompatible Initialization
     InvalidInitialization,
 
@@ -51,6 +54,7 @@ impl Error for JeromeError {
             &JeromeError::DuplicateVariable => "A variable was encountered twice",
             &JeromeError::InvalidInitialization => "An invalid initialization was provided",
             &JeromeError::NonPositiveProbability => "Encountered a non-positive probability",
+            &JeromeError::NotACPD=> "Requires a Conditional Probability Distribution",
             &JeromeError::General(ref err) => err.as_str(),
             &JeromeError::Unknown => "An unknown error occured"
         }
