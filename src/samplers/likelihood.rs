@@ -79,8 +79,6 @@ mod tests {
     use init::Initialization;
     use variable::Variable;
 
-    use std::collections::HashSet;
-
 
     /// Example taken from Koller & Friedman Figure 12.1 and Example 2.3
     #[test]
