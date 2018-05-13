@@ -42,6 +42,10 @@ impl DirectedModel {
         self.graph.get(v)
     }
 
+    /// Get a topological order of the `DirectedModel`
+    pub fn topological_order(&self) -> Vec<Variable> {
+        self.graph.keys().cloned().collect() 
+    }
 }
 
 impl Model for DirectedModel {
@@ -98,23 +102,6 @@ impl Model for DirectedModel {
                   // and multiply those probability by the chain rule
                   // but if there are any errors, just return the error
                   .fold(Ok(1.0), |acc, val| acc.and_then(|p| val.map(|v| p * v)))
-    }
-
-    /// Sample a full `Assignment` from the `DirectedModel`
-    ///
-    /// This is a simple implementation of forward sampling, as defined in Koller & Friedman
-    /// Algorithm 12.1
-    fn sample(&self) -> Assignment {
-        let mut a = Assignment::new();
-
-        for (ref var, ref cpt) in self.graph.iter() {
-            // this cannot fail, because we iterate in topological order so each variable will get
-            // a full assignment (minus itself) thus satistfying the contract of sample_cpd
-            let v_assignment = cpt.sample_cpd(&a).unwrap();
-            a.set(&var, v_assignment);
-        }
-
-        a
     }
 }
 
@@ -402,17 +389,6 @@ mod tests {
 
             let expected = if i == 0 { 0.95 } else { 0.05 };
             assert_eq!(expected, new_model.probability(&a).unwrap());
-        }
-        
-        ///////////////////////////////////////////////////////////////////////////////////////////
-        // TEST SAMPLING
-        for _i in 0..100 {
-            let a = model.sample();
-
-            assert!(a.get(&intelligence).is_some());
-            assert!(*a.get(&intelligence).unwrap() <= 1);
-            assert!(a.get(&sat).is_some());
-            assert!(*a.get(&sat).unwrap() <= 1);
         }
     }
 }

@@ -109,16 +109,6 @@ impl Model for UndirectedModel {
                     .map(|v| v / self.partition)
     }
 
-
-    /// Sample a full `Assignment` from the `Model`
-    ///
-    /// # Returns:
-    /// a full `Assignment` to the `Variable`s in the `Model`, sampled from the probability
-    /// distribution defined by the `Model`
-    fn sample(&self) -> Assignment {
-        Assignment::new()
-    }
-
 }
 
 

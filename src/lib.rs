@@ -13,10 +13,11 @@ extern crate ndarray;
 extern crate ndarray_rand;
 extern crate rand;
 
-pub mod variable;
 pub mod factor;
-pub mod model;
 pub mod init;
+pub mod model;
+pub mod samplers;
 pub mod util;
 pub use util::{Result, JeromeError};
+pub mod variable;
 

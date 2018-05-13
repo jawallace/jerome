@@ -50,14 +50,6 @@ pub trait Model{
     /// # Returns
     /// the probability of the `Assignment` given the `Model`
     fn probability(&self, assignment: &Assignment) -> Result<f64>;
-
-
-    /// Sample a full `Assignment` from the `Model`
-    ///
-    /// # Returns:
-    /// a full `Assignment` to the `Variable`s in the `Model`, sampled from the probability
-    /// distribution defined by the `Model`
-    fn sample(&self) -> Assignment;
 }
 
 pub mod directed;
