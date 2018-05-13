@@ -6,7 +6,8 @@ use model::directed::DirectedModel;
 use variable::Assignment;
 use super::{IndependentSampler, Sampler};
 
-/// A simple, stateless `Sampler` for Bayesian Models
+/// A simple, stateless `Sampler` for Bayesian Models that uses forward sampling to draw full
+/// assignments from the `DirectedModel`
 pub struct ForwardSampler<'a> {
     
     /// The `DirectedModel` to sample
