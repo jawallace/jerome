@@ -1,10 +1,11 @@
-//! Defines a `Model`, which is a Bayesian (directed) or Markovian (undirected) graphical model
-//! representing the factorization of a probability distribution P.
+//! Defines a `DirectedModel`, which is a Bayesian model that represents the factorization of 
+//! a probability distribution P
 
 use factor::Factor;
 use init::Initialization;
 use util::{Result, JeromeError};
 use variable::{Assignment, Variable};
+use super::Model;
 
 use bidir_map::BidirMap;
 use indexmap::IndexMap;
@@ -37,39 +38,38 @@ pub struct DirectedModel {
 impl DirectedModel {
    
     /// Get the `Factor` for the given variable in this model.
-    pub fn factor(&self, v: &Variable) -> Option<&Factor> {
+    pub fn cpd(&self, v: &Variable) -> Option<&Factor> {
         self.graph.get(v)
     }
 
+}
+
+impl Model for DirectedModel {
+
+    type Model_Type = DirectedModel;
+    
     /// Lookup a `Variable` in the `DirectedModel` based on the name
-    pub fn lookup_variable(&self, name: &str) -> Option<&Variable> {
+    fn lookup_variable(&self, name: &str) -> Option<&Variable> {
         self.names.get_by_second(&String::from(name))
     }
 
     /// Lookup a `Variable`'s name in the `DirectedModel`.
-    pub fn lookup_name(&self, var: &Variable) -> Option<&String> {
+    fn lookup_name(&self, var: &Variable) -> Option<&String> {
         self.names.get_by_first(var)
     }
 
     /// Get all `Variable`s in the model.
-    pub fn variables(&self) -> HashSet<Variable> {
+    fn variables(&self) -> HashSet<Variable> {
         self.graph.keys().map(|&v| v).collect()
     }
 
     /// Get the number of `Variable`s in the the `DirectedModel`
-    pub fn num_variables(&self) -> usize {
+    fn num_variables(&self) -> usize {
         self.graph.len()
     }
 
     /// Condition the `DirectedModel` given the evidence.
-    ///
-    /// # Args
-    /// * `evidence`: a partial `Assignment` of the `Variable`s in this `DirectedModel`.
-    ///
-    /// # Returns:
-    /// a new `DirectedModel` with scope ```self.vars() - evidence.keys()``` that represents the
-    /// conditional distribution ```P(self.scope() - evidence.keys() | evidence.keys())```
-    pub fn condition(&self, evidence: &Assignment) -> Self {
+    fn condition(&self, evidence: &Assignment) -> Self {
         let mut builder = DirectedModelBuilder::new();
 
         // For each variable in the graph
@@ -90,15 +90,7 @@ impl DirectedModel {
     }
 
     /// Determine the probability of a full `Assignment` to the `Variable`s in the `DirectedModel`.
-    ///
-    /// Specifically, this computes ```P(zeta)```, where ```zeta``` is a full assignment.
-    ///
-    /// # Args
-    /// * `assignment`: a full `Assignment` to the `DirectedModel`
-    ///
-    /// # Returns
-    /// the probability of the `Assignment` given the `DirectedModel`
-    pub fn probability(&self, assignment: &Assignment) -> Result<f64> {
+    fn probability(&self, assignment: &Assignment) -> Result<f64> {
         // for every variable in the graph
         self.graph.values()
                   // get the probability of the assignment
@@ -112,11 +104,7 @@ impl DirectedModel {
     ///
     /// This is a simple implementation of forward sampling, as defined in Koller & Friedman
     /// Algorithm 12.1
-    ///
-    /// # Returns:
-    /// a full `Assignment` to the `Variable`s in the `DirectedModel`, sampled from the probability
-    /// distribution defined by the `DirectedModel`
-    pub fn sample(&self) -> Assignment {
+    fn sample(&self) -> Assignment {
         let mut a = Assignment::new();
 
         for (ref var, ref cpt) in self.graph.iter() {
@@ -128,9 +116,7 @@ impl DirectedModel {
 
         a
     }
-
 }
-
 
 
 /// An implementation of the [builder pattern] for creating a `DirectedModel`.
@@ -297,7 +283,7 @@ mod tests {
         let v2 = model.lookup_variable(name.as_str()).unwrap();
         assert_eq!(&v, v2);
 
-        let f = model.factor(&v).unwrap();
+        let f = model.cpd(&v).unwrap();
         assert!(! f.is_identity());
         assert!(f.is_cpd());
         assert_eq!(vec![v], f.scope());
@@ -327,7 +313,7 @@ mod tests {
         let v2 = model.lookup_variable(name.as_str()).unwrap();
         assert_eq!(&v, v2);
 
-        let f = model.factor(&v).unwrap();
+        let f = model.cpd(&v).unwrap();
         assert!(! f.is_identity());
         assert!(f.is_cpd());
         assert_eq!(vec![v], f.scope());
