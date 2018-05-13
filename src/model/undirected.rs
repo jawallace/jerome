@@ -38,6 +38,12 @@ impl UndirectedModel {
     pub fn partition(&self) -> f64 {
         self.partition
     }
+
+
+    /// Get the `Factor`s that comprise the `UndirectedModel`
+    pub fn factors(&self) -> &Vec<Factor> {
+        &self.factors
+    }
 }
 
 
@@ -113,7 +119,7 @@ impl Model for UndirectedModel {
 
 
 /// Utility function to compute the partition function given a set of `Factor`s.
-fn compute_partition(scope: &Vec<Variable>, factors: &Vec<Factor>) -> f64 {
+pub fn compute_partition(scope: &Vec<Variable>, factors: &Vec<Factor>) -> f64 {
     let assn_val = |a: Assignment| -> f64 {
         factors.iter().map(|f| f.value(&a).unwrap()).product()
     };

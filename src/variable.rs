@@ -93,6 +93,7 @@ impl ToString for Variable {
 }
 
 /// Represents an assignment of one or more `Variable`s to values.
+#[derive(Clone, Debug)]
 pub struct Assignment {
     assignments: HashMap<Variable, usize>
 }
@@ -109,10 +110,6 @@ impl Assignment {
     ///
     ///
     pub fn set(&mut self, v: &Variable, value: usize) -> Option<JeromeError> {
-        if self.assignments.contains_key(v) {
-            return Some(JeromeError::General(format!("Already contains an assignment to {:?}", v)));
-        } 
-
         if value < v.cardinality() {
             self.assignments.insert(*v, value);
             return None;
@@ -127,6 +124,10 @@ impl Assignment {
                 )
             )
         )
+    }
+
+    pub fn unset(&mut self, v: &Variable) {
+        self.assignments.remove(v);
     }
 
     pub fn get(&self, v: &Variable) -> Option<&usize> {
@@ -213,10 +214,6 @@ mod tests {
 
         if let Some(_) = assn.set(&v, 1) {
             panic!("Failed to add a value in range");
-        }
-
-        if let None = assn.set(&v, 0) {
-            panic!("Did not fail when adding a duplicate assignment");
         }
 
         match assn.get(&v) {

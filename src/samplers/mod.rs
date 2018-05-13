@@ -4,9 +4,11 @@ use variable::Assignment;
 
 pub mod forward;
 pub mod likelihood;
+pub mod gibbs;
 
 pub use self::forward::ForwardSampler;
 pub use self::likelihood::LikelihoodWeightedSampler;
+pub use self::gibbs::GibbsSampler;
 
 pub trait Sampler {
   
@@ -34,7 +36,7 @@ pub trait WeightedSampler {
 
 }
 
-pub trait IndepdendentWeightedSampler {
+pub trait IndependentWeightedSampler {
 
     fn ind_weighted_sample(&self) -> WeightedSample;
 

@@ -2,7 +2,7 @@
 //! 
 //! Koller & Friedman Algorithm 12.2 (pp 493)
 
-use super::{WeightedSampler, IndepdendentWeightedSampler, WeightedSample};
+use super::{WeightedSampler, IndependentWeightedSampler, WeightedSample};
 use variable::Assignment;
 use model::directed::DirectedModel;
 
@@ -61,7 +61,7 @@ impl<'a> WeightedSampler for LikelihoodWeightedSampler<'a> {
 }
 
 
-impl<'a> IndepdendentWeightedSampler for LikelihoodWeightedSampler<'a> {
+impl<'a> IndependentWeightedSampler for LikelihoodWeightedSampler<'a> {
     
     fn ind_weighted_sample(&self) -> WeightedSample {
         self.get_sample()
@@ -70,7 +70,7 @@ impl<'a> IndepdendentWeightedSampler for LikelihoodWeightedSampler<'a> {
 }
 
 
-#[cfg(tests)]
+#[cfg(test)]
 mod tests {
 
     use super::*; 
@@ -82,8 +82,8 @@ mod tests {
     use std::collections::HashSet;
 
 
-    #[test]
     /// Example taken from Koller & Friedman Figure 12.1 and Example 2.3
+    #[test]
     fn sample() {
         let d = Variable::binary();
         let i = Variable::binary();
@@ -98,13 +98,27 @@ mod tests {
         let cpd_l = Factor::cpd(l, vec![g], array![ [0.1, 0.9], [0.4, 0.6], [0.99, 0.01] ].into_dyn()).unwrap();
         let cpd_s = Factor::cpd(s, vec![i], array![ [0.95, 0.05], [0.2, 0.8] ].into_dyn()).unwrap();
 
-        let model = DirectedModelBuilder::new().with_variable(d, vec![], Initialization::Binomial(0.6))
-                                               .with_variable(i, vec![], Initialization::Binomial(0.7))
-                                               .with_variable(g, vec![i,d], Initialization::Table(cpd_g))
-                                               .with_variable(s, vec![i], Initialization::Table(cpd_s))
-                                               .with_variable(l, vec![g], Initialization::Table(cpd_l))
-                                               .build()
-                                               .unwrap();
+        let model = DirectedModelBuilder::new().with_variable(
+                                                    &d, 
+                                                    vec![].into_iter().collect(), 
+                                                    Initialization::Binomial(0.6)
+                                                ).with_variable(
+                                                    &i, 
+                                                    vec![].into_iter().collect(), 
+                                                    Initialization::Binomial(0.7)
+                                                ).with_variable(
+                                                    &g, 
+                                                    vec![i,d].into_iter().collect(), 
+                                                    Initialization::Table(cpd_g)
+                                                ).with_variable(
+                                                    &s, 
+                                                    vec![i].into_iter().collect(), 
+                                                    Initialization::Table(cpd_s)
+                                                ).with_variable(
+                                                    &l, 
+                                                    vec![g].into_iter().collect(), 
+                                                    Initialization::Table(cpd_l)
+                                                ).build().unwrap();
 
 
         let mut evidence = Assignment::new();
@@ -113,7 +127,7 @@ mod tests {
 
         let mut sampler = LikelihoodWeightedSampler::new(&model, &evidence);
         for _ in 0..100 {
-            let (particle, weight) = sampler.weighted_sample();
+            let WeightedSample(particle, weight) = sampler.weighted_sample();
 
             assert!(particle.get(&d).is_some());
             assert!(*particle.get(&d).unwrap() < 2);
@@ -125,14 +139,14 @@ mod tests {
             assert!(particle.get(&s).is_some());
             assert_eq!(*particle.get(&s).unwrap(), 1);
             assert!(particle.get(&l).is_some());
-            assert_eq!(particle.get(&l).unwrap(), 0);
+            assert_eq!(*particle.get(&l).unwrap(), 0);
 
-            assert!(weight >= 0);
-            assert!(weight <= 1);
+            assert!(weight >= 0.0);
+            assert!(weight <= 1.0);
         }
         
         for _ in 0..100 {
-            let (particle, weight) = sampler.ind_weighted_sample();
+            let WeightedSample(particle, weight) = sampler.ind_weighted_sample();
 
             assert!(particle.get(&d).is_some());
             assert!(*particle.get(&d).unwrap() < 2);
@@ -144,27 +158,26 @@ mod tests {
             assert!(particle.get(&s).is_some());
             assert_eq!(*particle.get(&s).unwrap(), 1);
             assert!(particle.get(&l).is_some());
-            assert_eq!(particle.get(&l).unwrap(), 0);
+            assert_eq!(*particle.get(&l).unwrap(), 0);
 
-            assert!(weight >= 0);
-            assert!(weight <= 1);
+            assert!(weight >= 0.0);
+            assert!(weight <= 1.0);
         }
 
         // verify the weight in example 12.3
         loop {
-            let (particle, weight) = sampler.weighted_sample();
+            let WeightedSample(particle, weight) = sampler.weighted_sample();
 
-            let dval = particle.get(&d).unwrap();
-            let ival = particle.get(&i).unwrap();
-            let gval = particle.get(&g).unwrap();
+            let dval = *particle.get(&d).unwrap();
+            let ival = *particle.get(&i).unwrap();
+            let gval = *particle.get(&g).unwrap();
 
-            if dval == 1 && ival == 0 && gval == 2 {
+            if dval == 1 && ival == 0 && gval == 1 {
                 assert!((weight - 0.02).abs() < 0.001);
                 break;
             }
         }
     }
-
 }
 
 
