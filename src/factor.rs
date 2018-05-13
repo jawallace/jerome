@@ -381,7 +381,19 @@ impl Factor {
             }
         }
     }
-    
+
+
+    pub fn normalize(&self) -> Self {
+        match self {
+            &Factor::Identity => Factor::Identity,
+            &Factor::TableFactor { ref scope, ref table, .. } => {
+                let z = table.scalar_sum();
+                Factor::make_factor(scope.clone(), table / z, true).unwrap()
+            }
+        }
+    }
+
+
     /// Randomly sample an assignment to the CPD.
     ///
     /// This is not defined for a `Factor` for which ```factor.is_cpd() == false```.

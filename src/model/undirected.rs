@@ -6,6 +6,7 @@ use init::Initialization;
 use util::{Result, JeromeError};
 use variable::{all_assignments, Assignment, Variable};
 use super::Model;
+use super::directed::DirectedModel;
 
 use bidir_map::BidirMap;
 
@@ -80,7 +81,11 @@ impl Model for UndirectedModel {
     /// a new `Model` with scope ```self.vars() - evidence.keys()``` that represents the
     /// conditional distribution ```P(self.scope() - evidence.keys() | evidence.keys())```
     fn condition(&self, evidence: &Assignment) -> Self {
-        let factors = self.factors.iter().map(|ref f| f.reduce(evidence)).collect();
+        let factors = self.factors.iter()
+                                  .map(|ref f| f.reduce(evidence))
+                                  .filter(|f| ! f.is_identity())
+                                  .collect();
+
         let variables: BidirMap<Variable, String> = self.variables
                                                         .iter()
                                                         .filter(|(v, _)| evidence.get(v).is_none())
@@ -113,6 +118,33 @@ impl Model for UndirectedModel {
                     .fold(Ok(1.0), |acc, val| acc.and_then(|p| val.map(|v| p * v)))
                     // and finally normalize by the partition function
                     .map(|v| v / self.partition)
+    }
+
+}
+
+
+impl<'a> From<&'a DirectedModel> for UndirectedModel {
+    
+    /// Defines the conversion from `DirectedModel`s to `UndirectedModel`s
+    fn from(directed: &'a DirectedModel) -> Self {
+        let factors: Vec<Factor> = directed.topological_order()
+                                           .iter()
+                                           .map(|v| directed.cpd(v).unwrap())
+                                           .cloned()
+                                           .collect();
+
+        let variables = directed.topological_order()
+                                .iter()
+                                .map(|v| (*v, directed.lookup_name(&v).unwrap().clone()))
+                                .collect();
+
+        let partition = compute_partition(&directed.topological_order(), &factors);
+
+        UndirectedModel {
+            factors, 
+            variables,
+            partition
+        }
     }
 
 }
