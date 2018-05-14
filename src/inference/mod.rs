@@ -21,7 +21,7 @@ pub use self::variable_elimination::VariableEliminationEngine;
 trait ConditionalInferenceEngine {
 
     /// Infer the joint distribution ```P(variables | evidence)```
-    fn infer(&self, variables: &HashSet<Variable>) -> Result<Factor>;
+    fn infer(&mut self, variables: &HashSet<Variable>) -> Result<Factor>;
 
 }
 
@@ -54,7 +54,7 @@ mod tests {
     use super::*;
     use model::directed::{DirectedModel, DirectedModelBuilder};
     use init::Initialization;
-    use std::time::Instant;
+    use samplers::LikelihoodWeightedSampler;
 
     /// Utility function to build the student inference example
     fn build_student_example() -> (Variable, DirectedModel, Assignment) {
@@ -92,7 +92,7 @@ mod tests {
     }
     
     /// Utility method to test the actual inference task
-    fn test_inference(i: Variable, engine: &ConditionalInferenceEngine, precision: f64) {
+    fn test_inference(i: Variable, engine: &mut ConditionalInferenceEngine, precision: f64) {
         let f = engine.infer(&vec![i].into_iter().collect());
 
         assert!(! f.is_err());
@@ -113,11 +113,11 @@ mod tests {
         let (i, model, evidence) = build_student_example();
 
         // note that this implicitly tests for_undirected as well!
-        let engine = VariableEliminationEngine::for_directed(&model, &evidence);
+        let mut engine = VariableEliminationEngine::for_directed(&model, &evidence);
 
         // the result should be the same on subsequent iterations
         for _ in 0..10 {
-            test_inference(i, &engine, 0.00000001);
+            test_inference(i, &mut engine, 0.00000001);
         }
     }
     
@@ -127,11 +127,12 @@ mod tests {
         let (i, model, evidence) = build_student_example();
 
         // note that this implicitly tests for_undirected as well!
-        let engine = ImportanceSamplingEngine::new(&model, &evidence, 2000);
+        let mut sampler = LikelihoodWeightedSampler::new(&model, &evidence);
+        let mut engine = ImportanceSamplingEngine::new(&mut sampler, 2000);
 
         // the result should be the same on subsequent iterations
         for _ in 0..10 {
-            test_inference(i, &engine, 0.005);
+            test_inference(i, &mut engine, 0.005);
         }
     }
 

@@ -10,6 +10,7 @@ pub use self::forward::ForwardSampler;
 pub use self::likelihood::LikelihoodWeightedSampler;
 pub use self::gibbs::GibbsSampler;
 
+
 pub trait Sampler {
   
     /// Sample from the associated `Model`.
@@ -36,7 +37,7 @@ pub trait WeightedSampler {
 
 }
 
-pub trait IndependentWeightedSampler {
+pub trait IndependentWeightedSampler : WeightedSampler {
 
     fn ind_weighted_sample(&self) -> WeightedSample;
 

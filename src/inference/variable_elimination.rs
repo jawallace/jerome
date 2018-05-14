@@ -121,7 +121,7 @@ fn max_cardinality_elimination_order(model: &UndirectedModel) -> Vec<Variable> {
 
 impl ConditionalInferenceEngine for VariableEliminationEngine {
 
-    fn infer(&self, variables: &HashSet<Variable>) -> Result<Factor> {
+    fn infer(&mut self, variables: &HashSet<Variable>) -> Result<Factor> {
         // check input arguments
         if variables.iter().any(|v| ! self.model.variables().contains(v)) {
             // a variable requested is not found in the (reduced) model
