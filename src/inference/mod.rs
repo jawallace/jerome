@@ -7,9 +7,11 @@ use super::Result;
 use std::collections::HashSet;
 
 mod importance_sampling;
+mod mcmc;
 mod variable_elimination;
 
 pub use self::importance_sampling::ImportanceSamplingEngine;
+pub use self::mcmc::McmcEngine;
 pub use self::variable_elimination::VariableEliminationEngine;
 
 
@@ -38,6 +40,7 @@ trait MapInferenceEngine {
 
 }
 
+
 #[cfg(test)]
 /// Tests for the inference engines in this module. Tests are hoisted here to avoid duplication.
 /// Any tests specific to the inference engine are held within that submodule's tests module.
@@ -54,7 +57,7 @@ mod tests {
     use super::*;
     use model::directed::{DirectedModel, DirectedModelBuilder};
     use init::Initialization;
-    use samplers::LikelihoodWeightedSampler;
+    use samplers::{GibbsSampler, LikelihoodWeightedSampler};
 
     /// Utility function to build the student inference example
     fn build_student_example() -> (Variable, DirectedModel, Assignment) {
@@ -132,7 +135,22 @@ mod tests {
 
         // the result should be the same on subsequent iterations
         for _ in 0..10 {
-            test_inference(i, &mut engine, 0.005);
+            test_inference(i, &mut engine, 0.01);
+        }
+    }
+    
+    #[test]
+    /// Test importance sampling
+    fn mcmc() {
+        let (i, model, evidence) = build_student_example();
+
+        // note that this implicitly tests for_undirected as well!
+        let mut sampler = GibbsSampler::for_directed(&model, &evidence);
+        let mut engine = McmcEngine::new(&mut sampler, 10000, 2000);
+
+        // the result should be the same on subsequent iterations
+        for _ in 0..10 {
+            test_inference(i, &mut engine, 0.01);
         }
     }
 
