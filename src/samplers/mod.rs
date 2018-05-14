@@ -28,7 +28,7 @@ pub trait IndependentSampler {
 
 /// A sample (a full assignment) and the associated weight.
 /// Used for likelihood weighting.
-pub struct WeightedSample(Assignment, f64);
+pub struct WeightedSample(pub Assignment, pub f64);
 
 pub trait WeightedSampler {
     
