@@ -13,6 +13,7 @@ extern crate ndarray;
 extern crate ndarray_rand;
 extern crate rand;
 
+pub mod estimators;
 pub mod factor;
 pub mod inference;
 pub mod init;

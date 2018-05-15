@@ -6,7 +6,7 @@ use std::result;
 
 pub type Result<T> = result::Result<T, JeromeError>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum JeromeError {
 
     /// Represents an incomplete assignment where a complete assignment was required.
@@ -35,6 +35,9 @@ pub enum JeromeError {
     /// Represents a situation in which there was a non-positive probability provided
     NonPositiveProbability,
 
+    /// There is not enough data provided 
+    NotEnoughData,
+
     /// A general error with the given description
     General(String),
 
@@ -55,6 +58,7 @@ impl Error for JeromeError {
             &JeromeError::InvalidInitialization => "An invalid initialization was provided",
             &JeromeError::NonPositiveProbability => "Encountered a non-positive probability",
             &JeromeError::NotACPD=> "Requires a Conditional Probability Distribution",
+            &JeromeError::NotEnoughData => "Not enough data has been provided",
             &JeromeError::General(ref err) => err.as_str(),
             &JeromeError::Unknown => "An unknown error occured"
         }
