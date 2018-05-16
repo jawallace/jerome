@@ -19,6 +19,9 @@ cargo, Rust's build tool:
     # an example of using jerome to estimate parameters for a Bayesian network
     cargo run --example estimation
 
+For example:
+![jerome](jerome.png)
+
 `jerome` comes with a comprehensive test suite. Tests can be run from cargo:
 
     cargo test
