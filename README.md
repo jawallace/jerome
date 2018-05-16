@@ -45,17 +45,23 @@ of probabilistic graphical models for **directed (Bayesian) models**:
 * learning
 
 # Tasks
+Below is a rough outline of what has been accomplished so far. Please note that I was able to accomplish the goals I set
+forth in the project outline (those are in bold below). The other tasks are things that I was hoping to get to and plan
+to address in the future to end up with a useful framework.
+
 ## Representation
-- [x] Represent directed models
+- [x] **Represent discrete random variables**
+- [ ] Represent continous random variables
+- [x] **Represent directed models**
 - [x] Represent undirected models
 
 ## Inference
-- [x] Exact inference for directed models (Variable Elimination)
+- [x] **Exact inference for directed models** (Variable Elimination)
 - [ ] Exact inference for undirected models
-- [x] Approximate inference for directed models (Importance Sampling, MCMC Methods)
+- [x] **Approximate inference for directed models** (Importance Sampling, MCMC Methods)
 - [x] Approximate inference for undirected models (MCMC Methods)
 
-## Estimation
-- [x] Maximum Likelihood parameter estimation for directed models
+## Learning
+- [x] **Maximum Likelihood parameter estimation for directed models**
 - [ ] Bayesian parameter estimation for directed models
 
