@@ -1,7 +1,7 @@
 # jerome
 A general probabilistic graphical models framework for Rust.
 
-In the same vein as [edward](https://edwardlib.org), jerome is named for [Jerome
+In the same vein as [edward](http://edwardlib.org), jerome is named for [Jerome
 Cornfield](https://en.wikipedia.org/wiki/Jerome_Cornfield), a pioneer
 of Bayesian statistics that was the first to link a cause-effect relationship
 between smoking and lung cancer and laid the groundwork for ["much of modern
