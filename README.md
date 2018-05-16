@@ -30,6 +30,11 @@ For example running the [estimation](examples/estimation.rs) example looks like 
 Note that, at the moment, the tests that use random number generation are not seeded, and therefore occasionally fail
 if, for example, samples drawn from a model for inference yield a probability slightly outside of the defined limits.
 
+Finally, HTML documentation for `jerome` and it's dependencies can be generated via cargo's `doc` command:
+
+    cargo doc
+    firefox target/doc/jerome/index.html
+
 # Goals
 The ultimate goal for `jerome` is to provide an efficient framework for Bayesian inference in Rust.
 
