@@ -1,12 +1,12 @@
 # jerome
 A general probabilistic graphical models framework for Rust.
 
-In the same vein as [edward](http://edwardlib.org) which is named after an influential statistician, jerome is named for [Jerome
+In the same vein as [edward](http://edwardlib.org) which is named after an influential statistician, `jerome` is named for [Jerome
 Cornfield](https://en.wikipedia.org/wiki/Jerome_Cornfield), a pioneer of Bayesian statistics that was the first to link a cause-effect relationship
 between smoking and lung cancer and laid the groundwork for ["much of modern epidemiology"](https://blogs.sas.com/content/iml/2013/03/18/biography-of-jerome-cornfield.html).
 
 # Getting Started
-To use jerome, you will need Rust 1.26+. Instructions for installing Rust are
+To use `jerome`, you will need Rust 1.26+. Instructions for installing Rust are
 [here](https://blog.rust-lang.org/2018/05/10/Rust-1.26.html). 
 
 The fastest way to start using `jerome` is to take a look at the examples in `examples/`. These examples can be run via
