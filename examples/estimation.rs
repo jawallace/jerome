@@ -1,4 +1,4 @@
-//! Provides an example of how to use Jerome to estimate inference on a Bayesian Network.
+//! Provides an example of how to use Jerome to estimate parameters for a Bayesian Network.
 //!
 //! Jeffrey Wallace
 //! EN.605.425 Probabilistic Graphical Models
