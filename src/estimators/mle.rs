@@ -73,10 +73,9 @@ impl<'a> Estimator<'a, Factor> for LocalMLEstimator {
             return Err(JeromeError::DivideByZero);
         }
 
-        if m_u.ndim() > 0 {
-            let ct = m_u.shape()[0];
-            m_u = m_u.into_shape((ct, 1)).unwrap().into_dyn();
-        }
+        let mut new_shape: Vec<usize> = m_u.shape().iter().cloned().collect();
+        new_shape.push(1);
+        m_u = m_u.into_shape(new_shape).unwrap().into_dyn();
 
         let new_table = self.table.clone() / m_u;
 

@@ -23,3 +23,14 @@ pub mod util;
 pub use util::{Result, JeromeError};
 pub mod variable;
 
+pub use estimators::*;
+pub use factor::*;
+pub use inference::*;
+pub use init::*;
+pub use model::*;
+pub use model::directed::*;
+pub use model::undirected::*;
+pub use samplers::*;
+pub use util::*;
+pub use variable::*;
+

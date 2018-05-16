@@ -20,7 +20,7 @@ pub use self::variable_elimination::VariableEliminationEngine;
 ///
 /// `ConditionalInferenceEngine`s are stateful and must take the evidence `e` as an argument to whatever
 /// construction mechanism they employ.
-trait ConditionalInferenceEngine {
+pub trait ConditionalInferenceEngine {
 
     /// Infer the joint distribution ```P(variables | evidence)```
     fn infer(&mut self, variables: &HashSet<Variable>) -> Result<Factor>;
@@ -33,7 +33,7 @@ trait ConditionalInferenceEngine {
 ///
 /// `MapInferenceEngine`s are stateful and must take the evidence `e` as an argument to whatever
 /// construction mechanism they employ.
-trait MapInferenceEngine {
+pub trait MapInferenceEngine {
 
     /// Infer the most probable assignment `Y = y` given the 
     fn infer(&self, variables: &HashSet<Variable>) -> Result<Assignment>;
